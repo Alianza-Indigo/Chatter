@@ -102,7 +102,13 @@ Más detalle: [`docs/install.md`](docs/install.md).
   PostgreSQL propio como fuente de verdad.**
 - El bot solo accede a rooms donde fue **invitado** y solo procesa mensajes donde
   participa (DM o mención).
-- El proveedor LLM es configurable por tenant (externo, BYOK o local).
+- El proveedor LLM es configurable por tenant (externo, BYOK o local). Las claves
+  BYOK se **cifran en reposo** (AES-256-GCM) y nunca se exponen al frontend.
+- El bot carga su configuración **por tenant/room** (prompt, proveedor, modo de
+  respuesta) — ver [`docs/bot.md`](docs/bot.md).
+- **Web Push real** (suscripción + envío VAPID); la entrega por evento Matrix
+  requiere un notificador externo — ver [`docs/deployment.md`](docs/deployment.md).
+- Administración con **JWT** (`/api/admin/login`) además del token de bootstrap.
 - **No se simula E2EE.** El alcance del cifrado está documentado en
   [`docs/matrix.md`](docs/matrix.md).
 - No se usan logos, colores ni marca de WhatsApp.

@@ -7,6 +7,8 @@ import { logger } from './logger.js';
 import { healthRoutes } from './routes/health.js';
 import { tenantRoutes } from './routes/tenant.js';
 import { adminRoutes } from './routes/admin.js';
+import { authRoutes } from './routes/auth.js';
+import { pushRoutes } from './routes/push.js';
 
 /** Construye la instancia Fastify con middlewares, CORS y manejo de errores. */
 export async function buildServer() {
@@ -37,6 +39,8 @@ export async function buildServer() {
 
   await app.register(healthRoutes);
   await app.register(tenantRoutes);
+  await app.register(authRoutes);
+  await app.register(pushRoutes);
   await app.register(adminRoutes);
 
   return app;

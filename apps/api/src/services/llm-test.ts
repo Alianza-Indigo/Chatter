@@ -2,6 +2,7 @@ import type { Tenant as PrismaTenant } from '@prisma/client';
 import { DEFAULT_BOT_SYSTEM_PROMPT } from '@whalabi/shared';
 import type { BotTestResult } from '@whalabi/shared';
 import { env } from '../env.js';
+import { decryptSecret } from '../crypto.js';
 
 /**
  * Prueba ligera del proveedor LLM desde el panel admin.
@@ -17,7 +18,7 @@ export async function testTenantBot(
   const provider = tenant?.llmProvider ?? env.LLM_PROVIDER;
   const model = tenant?.llmModel ?? env.LLM_MODEL;
   const baseUrl = tenant?.llmBaseUrl ?? env.LLM_BASE_URL;
-  const apiKey = tenant?.llmApiKey ?? env.LLM_API_KEY;
+  const apiKey = (tenant?.llmApiKey ? decryptSecret(tenant.llmApiKey) : null) ?? env.LLM_API_KEY;
   const systemPrompt = tenant?.botSystemPrompt ?? DEFAULT_BOT_SYSTEM_PROMPT;
 
   const start = Date.now();

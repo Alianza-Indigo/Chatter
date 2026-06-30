@@ -14,6 +14,7 @@ import {
   updateTenant,
 } from '../services/tenant.js';
 import { testTenantBot } from '../services/llm-test.js';
+import { sendToUser } from '../services/push.js';
 import { toTenant } from '../mappers.js';
 
 /**
@@ -93,6 +94,20 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     const tenant = parsed.data.tenantId ? await getTenantById(parsed.data.tenantId) : null;
     const result = await testTenantBot(tenant, parsed.data.prompt);
+    return reply.send(result);
+  });
+
+  // Envía una notificación Web Push de prueba a un usuario.
+  app.post('/api/admin/push/test', async (req, reply) => {
+    const body = req.body as { tenantId?: string; userId?: string; message?: string };
+    if (!body.tenantId || !body.userId) {
+      return reply.code(400).send({ error: 'bad_request', message: 'tenantId y userId requeridos' });
+    }
+    const result = await sendToUser(body.tenantId, body.userId, {
+      title: 'Whalabi',
+      body: body.message ?? 'Notificación de prueba',
+      url: '/chat',
+    });
     return reply.send(result);
   });
 }

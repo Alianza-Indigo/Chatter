@@ -55,7 +55,9 @@ services:
       retries: 5
 
   synapse:
-    image: matrixdotorg/synapse:latest
+    # Versión fijada para reproducibilidad (no usar :latest en producción).
+    # Actualiza conscientemente revisando el changelog de Synapse.
+    image: matrixdotorg/synapse:v1.119.0
     restart: unless-stopped
     depends_on:
       postgres-synapse:
@@ -89,11 +91,16 @@ services:
       MATRIX_DEFAULT_HOMESERVER_URL: http://synapse:8008
       MATRIX_DEFAULT_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-change-me-admin-api-token}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-change-me-please-a-long-random-secret}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       CORS_ORIGIN: ${APP_PUBLIC_URL:-http://localhost:3000}
       LLM_PROVIDER: ${LLM_PROVIDER:-dummy}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@whalabi.app}
     ports:
       - "4000:4000"
 
@@ -116,6 +123,8 @@ services:
       BOT_ACCESS_TOKEN: ${BOT_ACCESS_TOKEN:-}
       BOT_DISPLAY_NAME: ${BOT_DISPLAY_NAME:-Whalabi Bot}
       BOT_STORE_CONTENT: ${BOT_STORE_CONTENT:-false}
+      BOT_DEFAULT_TENANT_SLUG: ${BOT_DEFAULT_TENANT_SLUG:-default}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       LLM_PROVIDER: ${LLM_PROVIDER:-dummy}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}

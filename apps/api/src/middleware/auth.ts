@@ -1,16 +1,41 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import jwt from 'jsonwebtoken';
 import { env } from '../env.js';
 
+export interface AdminClaims {
+  role: 'admin';
+}
+
+/** Emite un JWT de administrador firmado con ADMIN_JWT_SECRET. */
+export function issueAdminToken(): string {
+  return jwt.sign({ role: 'admin' } satisfies AdminClaims, env.ADMIN_JWT_SECRET, {
+    expiresIn: '12h',
+  });
+}
+
 /**
- * Guard simple para endpoints /api/admin/*.
- * Requiere la cabecera `x-admin-token` igual a ADMIN_API_TOKEN.
+ * Guard para /api/admin/*. Acepta:
+ *   1. `Authorization: Bearer <jwt>` firmado con ADMIN_JWT_SECRET (recomendado), o
+ *   2. `x-admin-token: <ADMIN_API_TOKEN>` (token estático, compatibilidad/bootstrap).
  *
- * Nota: para producción real conviene migrar a JWT firmado con ADMIN_JWT_SECRET
- * y sesiones; este token estático cubre el panel administrativo inicial.
+ * El token estático sirve para el primer login (`POST /api/admin/login`), que
+ * devuelve un JWT de vida corta para el resto de operaciones del panel.
  */
 export async function requireAdmin(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-  const token = req.headers['x-admin-token'];
-  if (typeof token !== 'string' || token.length === 0 || token !== env.ADMIN_API_TOKEN) {
-    reply.code(401).send({ error: 'unauthorized', message: 'Token de administración inválido.' });
+  const auth = req.headers.authorization;
+  if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(auth.slice(7), env.ADMIN_JWT_SECRET);
+      if (typeof decoded === 'object' && (decoded as AdminClaims).role === 'admin') return;
+    } catch {
+      // token inválido/expirado -> cae al chequeo del token estático
+    }
   }
+
+  const staticToken = req.headers['x-admin-token'];
+  if (typeof staticToken === 'string' && staticToken.length > 0 && staticToken === env.ADMIN_API_TOKEN) {
+    return;
+  }
+
+  reply.code(401).send({ error: 'unauthorized', message: 'Credenciales de administración inválidas.' });
 }

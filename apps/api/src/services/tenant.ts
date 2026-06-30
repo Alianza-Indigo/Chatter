@@ -3,6 +3,7 @@ import { normalizeDomain } from '@whalabi/shared';
 import type { CreateTenantInput, UpdateTenantInput } from '@whalabi/shared';
 import { prisma } from '../db.js';
 import { env } from '../env.js';
+import { encryptSecret } from '../crypto.js';
 
 /**
  * Resuelve un tenant por dominio público. Si no hay match exacto, intenta el
@@ -38,6 +39,7 @@ export async function createTenant(input: CreateTenantInput): Promise<PrismaTena
       llmProvider: input.llmProvider ?? 'dummy',
       llmModel: input.llmModel ?? null,
       llmBaseUrl: input.llmBaseUrl ?? null,
+      llmApiKey: encryptSecret(input.llmApiKey),
       primaryColor: input.branding?.primaryColor ?? '#4f46e5',
       accentColor: input.branding?.accentColor ?? '#a78bfa',
       logoUrl: input.branding?.logoUrl ?? null,
@@ -66,6 +68,8 @@ export async function updateTenant(
       llmProvider: input.llmProvider,
       llmModel: input.llmModel,
       llmBaseUrl: input.llmBaseUrl,
+      // Solo re-cifra si se envía explícitamente (undefined deja el valor actual).
+      llmApiKey: input.llmApiKey === undefined ? undefined : encryptSecret(input.llmApiKey),
       primaryColor: input.branding?.primaryColor,
       accentColor: input.branding?.accentColor,
       logoUrl: input.branding?.logoUrl,

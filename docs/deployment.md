@@ -34,11 +34,55 @@ La API aplica `prisma migrate deploy` al arrancar (ver `apps/api/Dockerfile`).
 |----------|------|
 | `MATRIX_DEFAULT_SERVER_NAME` | Nombre de servidor Matrix (parte del MXID) |
 | `MATRIX_REGISTRATION_SHARED_SECRET` | Secreto para provisioning |
-| `ADMIN_API_TOKEN` | Protege `/api/admin/*` |
-| `ADMIN_JWT_SECRET` | Reservado para sesiones de panel (futuro) |
+| `ADMIN_API_TOKEN` | Token estático para el primer login admin |
+| `ADMIN_JWT_SECRET` | Firma los JWT de administración (`POST /api/admin/login`) |
+| `APP_ENCRYPTION_KEY` | Cifra secretos en reposo (`llmApiKey`). **Defínela en producción** |
 | `CORS_ORIGIN` | Orígenes del frontend permitidos |
-| `LLM_PROVIDER` / `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | Proveedor LLM |
+| `LLM_PROVIDER` / `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | Proveedor LLM por defecto |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push (genera con `npx web-push generate-vapid-keys`) |
 | `BOT_*` | Credenciales y comportamiento del bot |
+
+## Autenticación de administración
+
+`/api/admin/*` acepta dos credenciales:
+
+1. **Recomendado:** un **JWT** (`Authorization: Bearer <jwt>`) firmado con
+   `ADMIN_JWT_SECRET`. Se obtiene en `POST /api/admin/login` enviando el
+   `ADMIN_API_TOKEN`; el JWT vive 12 h.
+2. **Bootstrap/compatibilidad:** el token estático `x-admin-token: <ADMIN_API_TOKEN>`.
+
+```bash
+# Obtener un JWT
+curl -X POST $API/api/admin/login -H 'content-type: application/json' \
+  -d '{"token":"'"$ADMIN_API_TOKEN"'"}'
+# -> { "token": "<jwt>", "tokenType": "Bearer", "expiresIn": 43200 }
+```
+
+## Secretos en reposo
+
+Las claves BYOK del LLM (`llmApiKey` por tenant) se **cifran con AES-256-GCM**
+usando `APP_ENCRYPTION_KEY` antes de guardarse en Postgres. Sin esa variable, se
+guardan en texto plano (solo aceptable en desarrollo). Genera una clave fuerte:
+
+```bash
+openssl rand -base64 48
+```
+
+> Nota: si rotas `APP_ENCRYPTION_KEY`, los secretos cifrados con la clave anterior
+> dejan de poder descifrarse; re-introdúcelos vía `PATCH /api/admin/tenants/:id`.
+
+## Web Push
+
+Whalabi implementa el ciclo completo de Web Push (suscripción + envío VAPID):
+
+1. Genera claves VAPID y ponlas en `VAPID_*`.
+2. El frontend ofrece "Activar notificaciones" en Configuración.
+3. Prueba el envío real: `POST /api/admin/push/test` con `{ tenantId, userId, message }`.
+
+> **Alcance:** el envío automático ante **cada** mensaje de Matrix requiere un
+> notificador (p. ej. **Sygnal** como push gateway, o un hook desde el bot). El
+> servicio de envío (`sendToUser`) y el endpoint de prueba ya están listos; la
+> fuente de eventos Matrix se conecta aparte.
 
 ## TLS y dominios de tenant
 

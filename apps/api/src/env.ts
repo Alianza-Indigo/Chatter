@@ -10,7 +10,15 @@ const envSchema = z.object({
   MATRIX_DEFAULT_SERVER_NAME: z.string().default('whalabi.local'),
 
   ADMIN_API_TOKEN: z.string().min(1).default('change-me-admin-api-token'),
+  ADMIN_JWT_SECRET: z.string().min(1).default('change-me-please-a-long-random-secret'),
+  /** Clave para cifrar secretos en reposo (llmApiKey). Vacía = texto plano (solo dev). */
+  APP_ENCRYPTION_KEY: z.string().optional().default(''),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
+
+  // Web Push (VAPID). Vacío = push deshabilitado.
+  VAPID_PUBLIC_KEY: z.string().optional().default(''),
+  VAPID_PRIVATE_KEY: z.string().optional().default(''),
+  VAPID_SUBJECT: z.string().default('mailto:admin@whalabi.app'),
 
   // LLM por defecto (para /api/admin/bot/test cuando el tenant no define clave).
   LLM_PROVIDER: z.enum(['openai', 'ollama', 'dummy']).default('dummy'),
