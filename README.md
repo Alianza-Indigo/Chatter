@@ -90,6 +90,7 @@ Más detalle: [`docs/install.md`](docs/install.md).
 | [matrix.md](docs/matrix.md) | Synapse, registro, federación, E2EE |
 | [bot.md](docs/bot.md) | Bot inteligente y proveedores LLM |
 | [multi-tenant.md](docs/multi-tenant.md) | Modelo multi-tenant por dominio |
+| [qnap.md](docs/qnap.md) | Pruebas en NAS QNAP (Container Station) |
 | [testing-checklist.md](docs/testing-checklist.md) | Checklist de pruebas manuales |
 
 ---
