@@ -36,10 +36,15 @@ fi
 echo "==> Aplicando plantilla de Whalabi (homeserver.yaml)…"
 
 # 2) Renderizar la plantilla con sustitución de variables.
+#    El paso `generate` deja $SYNAPSE_DIR como propiedad del usuario de Synapse
+#    (UID 991), así que se escribe con `sudo tee`: el archivo queda legible por
+#    Synapse y la carpeta sigue siendo suya para escribir sus datos en runtime.
 export MATRIX_DEFAULT_SERVER_NAME APP_PUBLIC_URL MATRIX_REGISTRATION_SHARED_SECRET
+WRITE="tee"
+if [[ ! -w "$SYNAPSE_DIR" ]]; then WRITE="sudo tee"; fi
 envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET}' \
   < "$SYNAPSE_DIR/homeserver.yaml.template" \
-  > "$SYNAPSE_DIR/homeserver.yaml"
+  | $WRITE "$SYNAPSE_DIR/homeserver.yaml" > /dev/null
 
 echo "==> Listo. Arranca Synapse con:"
 echo "    docker compose -f infra/docker-compose.yml up -d postgres-synapse synapse"
