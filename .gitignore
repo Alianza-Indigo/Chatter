@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# prisma
+apps/api/prisma/*.db
+apps/api/prisma/migrations/dev.db*
+
+# logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# matrix / synapse runtime data
+infra/synapse/data/
+infra/synapse/homeserver.yaml
+infra/synapse/*.signing.key
+infra/synapse/*.log.config.local
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
+*.swp
+
+# pwa generated icons (keep source, ignore large generated)
+apps/web/public/sw-precache*.js

@@ -1,0 +1,70 @@
+# Whalabi — plantilla de homeserver.yaml para Synapse.
+#
+# Genera el archivo real con el script de inicialización:
+#   ./infra/scripts/init-synapse.sh
+# que ejecuta `generate` de Synapse y luego aplica estos ajustes.
+#
+# Las variables ${...} se sustituyen por el script a partir del .env.
+
+server_name: "${MATRIX_DEFAULT_SERVER_NAME}"
+pid_file: /data/homeserver.pid
+public_baseurl: "${APP_PUBLIC_URL}/"
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [client, federation]
+        compress: false
+
+# --- Base de datos (PostgreSQL, NO sqlite en producción) ---
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    password: synapse
+    database: synapse
+    host: postgres-synapse
+    port: 5432
+    cp_min: 5
+    cp_max: 10
+
+log_config: "/data/log.config"
+media_store_path: /data/media_store
+
+# --- Registro controlado ---
+# El registro abierto vía web se controla por tenant en Whalabi. A nivel de
+# Synapse se deja deshabilitado por defecto; el provisioning usa la API admin
+# con el registration_shared_secret.
+enable_registration: false
+enable_registration_without_verification: false
+registration_shared_secret: "${MATRIX_REGISTRATION_SHARED_SECRET}"
+
+# Para permitir registro abierto controlado por token, descomentar:
+# enable_registration: true
+# registration_requires_token: true
+
+# --- Federación ---
+# Opcional. Para una instancia privada por organización, mantener cerrada.
+federation_domain_whitelist: []
+# Para abrir federación, eliminar la whitelist vacía anterior.
+
+# --- Retención / privacidad ---
+# Whalabi no requiere E2EE para funcionar (ver docs/matrix.md). El cifrado
+# E2EE de Matrix puede activarse a nivel de cliente; este scaffold NO lo
+# habilita por defecto y NO debe presentarse como E2EE completo.
+encryption_enabled_by_default_for_room_type: off
+
+# --- URL preview (deshabilitado por privacidad por defecto) ---
+url_preview_enabled: false
+
+# --- Claves ---
+signing_key_path: "/data/${MATRIX_DEFAULT_SERVER_NAME}.signing.key"
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+report_stats: false
+suppress_key_server_warning: true

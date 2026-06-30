@@ -1,0 +1,110 @@
+// Prisma schema para Whalabi.
+//
+// IMPORTANTE: Whalabi NO almacena mensajes, rooms ni membresías como fuente
+// de verdad. Eso vive en Matrix/Synapse. Aquí solo se guarda la configuración
+// de producto (tenants, bot, logs operativos y suscripciones push).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LlmProvider {
+  openai
+  ollama
+  dummy
+}
+
+enum BotResponseMode {
+  mention
+  dm
+  always
+}
+
+enum BotLogStatus {
+  received
+  ignored
+  processing
+  responded
+  rate_limited
+  error
+}
+
+/// Una organización dentro de Whalabi, resuelta por dominio público.
+model Tenant {
+  id               String          @id @default(cuid())
+  name             String
+  slug             String          @unique
+  publicDomain     String          @unique
+
+  // Matrix
+  matrixBaseUrl    String
+  matrixServerName String
+
+  // Bot
+  botUserId        String?
+  botEnabled       Boolean         @default(false)
+  botSystemPrompt  String?
+  botResponseMode  BotResponseMode @default(mention)
+
+  // LLM
+  llmProvider      LlmProvider     @default(dummy)
+  llmModel         String?
+  llmBaseUrl       String?
+  /// Clave API del LLM específica del tenant (BYOK). Nunca se expone al frontend.
+  llmApiKey        String?
+
+  // Branding
+  primaryColor     String          @default("#4f46e5")
+  accentColor      String          @default("#a78bfa")
+  logoUrl          String?
+  tagline          String?
+
+  // Registro
+  allowRegistration Boolean        @default(false)
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  botLogs          BotLog[]
+  pushSubscriptions PushSubscription[]
+
+  @@index([publicDomain])
+  @@index([slug])
+}
+
+/// Log operativo del bot. No guarda contenido salvo BOT_STORE_CONTENT=true.
+model BotLog {
+  id        String       @id @default(cuid())
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  roomId    String
+  eventId   String?
+  userId    String?
+  status    BotLogStatus
+  /// Solo presente con opt-in explícito.
+  content   String?
+  error     String?
+  createdAt DateTime     @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([roomId])
+}
+
+/// Suscripción Web Push (estructura preparada; envío opcional).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, userId])
+}

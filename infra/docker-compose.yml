@@ -1,0 +1,155 @@
+# Whalabi — Docker Compose para desarrollo / despliegue base.
+#
+# Servicios:
+#   postgres-synapse  Base de datos de Synapse (fuente de verdad de mensajería)
+#   postgres-app      Base de datos de Whalabi (tenants, logs del bot)
+#   synapse           Homeserver Matrix
+#   api               API auxiliar de Whalabi (Fastify)
+#   bot               Bot inteligente (matrix-bot-sdk)
+#   web               Frontend Next.js (PWA)
+#   nginx             Reverse proxy opcional (perfil "proxy")
+#
+# Uso típico en desarrollo (solo infraestructura, apps con pnpm dev):
+#   docker compose up -d postgres-synapse postgres-app synapse
+#
+# Despliegue completo:
+#   docker compose --profile full up -d --build
+
+name: whalabi
+
+services:
+  postgres-synapse:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: synapse
+      POSTGRES_PASSWORD: synapse
+      POSTGRES_DB: synapse
+      # Synapse requiere esta configuración de collation.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - pg-synapse:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-app:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: whalabi
+      POSTGRES_PASSWORD: whalabi
+      POSTGRES_DB: whalabi
+    volumes:
+      - pg-app:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whalabi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    restart: unless-stopped
+    depends_on:
+      postgres-synapse:
+        condition: service_healthy
+    environment:
+      SYNAPSE_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
+      SYNAPSE_REPORT_STATS: "no"
+    volumes:
+      - ./synapse:/data
+    ports:
+      - "8008:8008"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8008/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  api:
+    profiles: ["full"]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres-app:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PORT: 4000
+      DATABASE_URL: postgresql://whalabi:whalabi@postgres-app:5432/whalabi?schema=public
+      MATRIX_DEFAULT_HOMESERVER_URL: http://synapse:8008
+      MATRIX_DEFAULT_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-change-me-admin-api-token}
+      CORS_ORIGIN: ${APP_PUBLIC_URL:-http://localhost:3000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-dummy}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    ports:
+      - "4000:4000"
+
+  bot:
+    profiles: ["full"]
+    build:
+      context: ..
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - synapse
+      - postgres-app
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://whalabi:whalabi@postgres-app:5432/whalabi?schema=public
+      BOT_ENABLED: ${BOT_ENABLED:-true}
+      BOT_HOMESERVER_URL: http://synapse:8008
+      BOT_USER_ID: ${BOT_USER_ID:-@whalabi-bot:whalabi.local}
+      BOT_PASSWORD: ${BOT_PASSWORD:-}
+      BOT_ACCESS_TOKEN: ${BOT_ACCESS_TOKEN:-}
+      BOT_DISPLAY_NAME: ${BOT_DISPLAY_NAME:-Whalabi Bot}
+      BOT_STORE_CONTENT: ${BOT_STORE_CONTENT:-false}
+      LLM_PROVIDER: ${LLM_PROVIDER:-dummy}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+    volumes:
+      - bot-storage:/app/.bot-storage
+
+  web:
+    profiles: ["full"]
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_MATRIX_HOMESERVER_URL: ${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-http://localhost:8008}
+        NEXT_PUBLIC_MATRIX_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+  nginx:
+    profiles: ["proxy"]
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - synapse
+    volumes:
+      - ./nginx/whalabi.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+
+volumes:
+  pg-synapse:
+  pg-app:
+  bot-storage:

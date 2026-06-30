@@ -1,0 +1,29 @@
+{
+  "name": "whalabi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Whalabi — el chat privado de tu organización. PWA de mensajería organizacional sobre Matrix/Synapse.",
+  "license": "MIT",
+  "packageManager": "pnpm@9.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev:web": "pnpm --filter @whalabi/web dev",
+    "dev:api": "pnpm --filter @whalabi/api dev",
+    "dev:bot": "pnpm --filter @whalabi/bot dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @whalabi/api db:generate",
+    "db:migrate": "pnpm --filter @whalabi/api db:migrate",
+    "db:seed": "pnpm --filter @whalabi/api db:seed",
+    "clean": "pnpm -r clean"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.12",
+    "tsx": "^4.16.2"
+  }
+}

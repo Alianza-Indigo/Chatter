@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Tripletes RGB (sin coma) para soportar modificadores de opacidad de Tailwind. */
+  --whalabi-primary-rgb: 79 70 229; /* índigo #4f46e5 */
+  --whalabi-accent-rgb: 167 139 250; /* lavanda #a78bfa */
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100;
+  }
+
+  .btn-primary {
+    @apply rounded-lg bg-brand px-4 py-2.5 font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+}

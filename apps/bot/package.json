@@ -1,0 +1,27 @@
+{
+  "name": "@whalabi/bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "db:generate": "prisma generate --schema ../api/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "@whalabi/shared": "workspace:*",
+    "matrix-bot-sdk": "^0.7.1",
+    "pino": "^9.3.2",
+    "tsx": "^4.16.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0",
+    "typescript": "^5.5.4"
+  }
+}
