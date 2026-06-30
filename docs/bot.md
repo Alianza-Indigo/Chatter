@@ -7,12 +7,23 @@ El bot (`apps/bot`) es un usuario Matrix que escucha por `/sync` con
 
 - Se loguea con `BOT_ACCESS_TOKEN` o `BOT_USER_ID` + `BOT_PASSWORD`.
 - **Ignora sus propios mensajes** (anti-loop).
-- Responde solo si:
-  - el room es un **DM** con el bot, **o**
-  - el mensaje **menciona** al bot (por MXID, localpart o display name).
-  - (El modo "always" por room queda preparado en el modelo de datos
-    `botResponseMode`; el bot actual cubre DM + mención.)
-- Mantiene **contexto acotado** por room (últimos 12 mensajes en memoria).
+- Resuelve la **configuración por tenant/room**: extrae el `server_name` del
+  `roomId` (`!abc:server`) y busca el tenant por `matrixServerName`; si no hay
+  match, usa `BOT_DEFAULT_TENANT_SLUG` y, en último término, las variables de env.
+  De cada tenant carga: `botSystemPrompt`, `botResponseMode`, proveedor LLM,
+  `llmModel`, `llmBaseUrl` y `llmApiKey` (BYOK, **descifrada** en memoria).
+- Responde según `botResponseMode` del tenant:
+  - `dm` → solo en DMs con el bot.
+  - `mention` (por defecto) → en DMs o cuando se le menciona.
+  - `always` → a todos los mensajes del room (sigue ignorando los propios).
+- Cachea proveedores LLM por firma de configuración y la config de tenant por
+  room (TTL 60 s).
+- **Limitación honesta (modo A, Synapse compartido):** si varios tenants comparten
+  el mismo `server_name`, no se distinguen por `roomId` y se usa el tenant por
+  defecto. Para multi-tenant estricto en un único homeserver haría falta un mapeo
+  explícito room→tenant.
+- Mantiene **contexto acotado** por room (últimos 12 mensajes en memoria; se
+  pierde al reiniciar y no se comparte entre réplicas).
 - Aplica **rate limit** por room (`BOT_RATE_LIMIT_PER_MINUTE`).
 - Auto-acepta invitaciones (`AutojoinRoomsMixin`) para poder participar donde se le
   invita.

@@ -1,39 +1,11 @@
-import { PrismaClient } from '@prisma/client';
 import { env } from './env.js';
 import { logger } from './logger.js';
+import { prisma } from './db.js';
 
 /**
- * Acceso opcional a la base de Whalabi para logs operativos del bot.
- * Si no hay DATABASE_URL, los logs solo van a stdout (el bot sigue operando).
- *
- * El cliente Prisma se genera desde el schema de la API:
- *   pnpm --filter @whalabi/bot db:generate
+ * Logs operativos del bot. Si no hay DB, van solo a stdout.
+ * Nunca guarda contenido salvo BOT_STORE_CONTENT=true.
  */
-let prisma: PrismaClient | null = null;
-let tenantId: string | null = null;
-
-if (env.DATABASE_URL) {
-  try {
-    prisma = new PrismaClient({ log: ['error'] });
-  } catch (err) {
-    logger.warn({ err }, 'No se pudo inicializar Prisma; logs solo en consola.');
-  }
-}
-
-/** Resuelve y cachea el tenantId asociado al bot (por slug por defecto). */
-async function getTenantId(): Promise<string | null> {
-  if (tenantId || !prisma) return tenantId;
-  try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { slug: env.BOT_DEFAULT_TENANT_SLUG },
-    });
-    tenantId = tenant?.id ?? null;
-  } catch {
-    tenantId = null;
-  }
-  return tenantId;
-}
-
 export type LogStatus =
   | 'received'
   | 'ignored'
@@ -43,6 +15,8 @@ export type LogStatus =
   | 'error';
 
 export interface LogEntry {
+  /** Tenant resuelto para el room (null si no se pudo resolver). */
+  tenantId: string | null;
   roomId: string;
   eventId?: string | null;
   userId?: string | null;
@@ -51,11 +25,13 @@ export interface LogEntry {
   error?: string | null;
 }
 
-/** Registra un evento operativo. Nunca lanza (los fallos de log no rompen el bot). */
+/** Registra un evento operativo. Nunca lanza (un fallo de log no rompe el bot). */
 export async function logEvent(entry: LogEntry): Promise<void> {
   const safeContent = env.BOT_STORE_CONTENT ? entry.content ?? null : null;
+
   logger.info(
     {
+      tenantId: entry.tenantId,
       roomId: entry.roomId,
       eventId: entry.eventId,
       userId: entry.userId,
@@ -65,13 +41,13 @@ export async function logEvent(entry: LogEntry): Promise<void> {
     'bot-event',
   );
 
-  if (!prisma) return;
+  // Sin DB o sin tenant resuelto: el log queda solo en stdout (no hay FK válida).
+  if (!prisma || !entry.tenantId) return;
+
   try {
-    const tid = await getTenantId();
-    if (!tid) return;
     await prisma.botLog.create({
       data: {
-        tenantId: tid,
+        tenantId: entry.tenantId,
         roomId: entry.roomId,
         eventId: entry.eventId ?? null,
         userId: entry.userId ?? null,

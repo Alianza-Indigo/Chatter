@@ -4,17 +4,13 @@ import {
   AutojoinRoomsMixin,
   SimpleFsStorageProvider,
 } from 'matrix-bot-sdk';
-import {
-  DEFAULT_BOT_SYSTEM_PROMPT,
-  mentionsUser,
-  truncate,
-  serverNameFromUserId,
-} from '@whalabi/shared';
+import { mentionsUser, truncate, serverNameFromUserId } from '@whalabi/shared';
 import { env } from './env.js';
 import { logger } from './logger.js';
 import { RateLimiter } from './rate-limit.js';
 import { createLLMProvider, type LLMProvider } from './llm/index.js';
 import { logEvent } from './store.js';
+import { resolveTenantForRoom, type ResolvedTenantConfig } from './tenants.js';
 
 const MAX_CONTEXT_MESSAGES = 12;
 
@@ -24,29 +20,25 @@ interface ContextMessage {
 }
 
 /**
- * Bot Matrix de Whalabi.
+ * Bot Matrix de Whalabi — multi-tenant.
  *
  * - Escucha mediante `/sync` (matrix-bot-sdk), NO webhooks.
  * - Ignora sus propios mensajes (anti-loop).
- * - Responde solo en DMs con el bot, por mención, o si el room es modo "always".
- * - Mantiene contexto limitado por room en memoria.
- * - Rate limit por room.
+ * - Resuelve la configuración POR TENANT/ROOM (prompt, proveedor LLM, clave
+ *   BYOK descifrada y modo de respuesta) según el homeserver del room.
+ * - `botResponseMode`: `dm` (solo DM), `mention` (DM o mención) o `always`.
+ * - Contexto limitado por room, rate limit por room.
  */
 export class WhalabiBot {
   private client!: MatrixClient;
   private botUserId = '';
-  private readonly llm: LLMProvider;
   private readonly limiter: RateLimiter;
   private readonly context = new Map<string, ContextMessage[]>();
-  /** Cache de membresía (heurística DM): roomId -> nº de miembros conocidos. */
   private readonly directRooms = new Set<string>();
+  /** Cache de proveedores LLM por firma de configuración. */
+  private readonly providerCache = new Map<string, LLMProvider>();
 
   constructor() {
-    this.llm = createLLMProvider({
-      provider: env.LLM_PROVIDER,
-      baseUrl: env.LLM_BASE_URL,
-      apiKey: env.LLM_API_KEY,
-    });
     this.limiter = new RateLimiter(env.BOT_RATE_LIMIT_PER_MINUTE);
   }
 
@@ -80,7 +72,36 @@ export class WhalabiBot {
     });
 
     await this.client.start();
-    logger.info(`Whalabi Bot iniciado como ${this.botUserId} (LLM: ${this.llm.kind}).`);
+    logger.info(`Whalabi Bot iniciado como ${this.botUserId} (multi-tenant).`);
+  }
+
+  /** Devuelve (y cachea) el proveedor LLM para una config de tenant. */
+  private providerFor(cfg: ResolvedTenantConfig): LLMProvider {
+    const { provider, baseUrl, model, apiKey } = cfg.llm;
+    const key = `${provider}|${baseUrl}|${model}|${apiKey ? 'k' : '-'}`;
+    let p = this.providerCache.get(key);
+    if (!p) {
+      p = createLLMProvider({ provider, baseUrl, apiKey });
+      this.providerCache.set(key, p);
+    }
+    return p;
+  }
+
+  /** Decide si responder según el modo del tenant. */
+  private shouldRespond(
+    mode: ResolvedTenantConfig['responseMode'],
+    isDirect: boolean,
+    mentioned: boolean,
+  ): boolean {
+    switch (mode) {
+      case 'always':
+        return true;
+      case 'dm':
+        return isDirect;
+      case 'mention':
+      default:
+        return isDirect || mentioned;
+    }
   }
 
   private async handleMessage(roomId: string, event: MatrixMessageEvent): Promise<void> {
@@ -92,9 +113,11 @@ export class WhalabiBot {
     if (sender === this.botUserId) return;
 
     const body = content.body;
-    this.pushContext(roomId, 'user', body);
+    const cfg = await resolveTenantForRoom(roomId);
 
+    this.pushContext(roomId, 'user', body);
     await logEvent({
+      tenantId: cfg.tenantId,
       roomId,
       eventId: event.event_id,
       userId: sender,
@@ -102,37 +125,42 @@ export class WhalabiBot {
       content: body,
     });
 
+    if (!cfg.botEnabled) {
+      await logEvent({ tenantId: cfg.tenantId, roomId, eventId: event.event_id, userId: sender, status: 'ignored' });
+      return;
+    }
+
     const isDirect = await this.isDirectRoom(roomId);
     const mentioned = mentionsUser(body, {
       userId: this.botUserId,
       displayName: env.BOT_DISPLAY_NAME,
     });
-    // Modo "always" no se conoce sin config por-room; aquí cubrimos DM + mención.
-    const shouldRespond = isDirect || mentioned;
 
-    if (!shouldRespond) {
-      await logEvent({ roomId, eventId: event.event_id, userId: sender, status: 'ignored' });
+    if (!this.shouldRespond(cfg.responseMode, isDirect, mentioned)) {
+      await logEvent({ tenantId: cfg.tenantId, roomId, eventId: event.event_id, userId: sender, status: 'ignored' });
       return;
     }
 
     if (!this.limiter.allow(roomId)) {
-      await logEvent({ roomId, eventId: event.event_id, userId: sender, status: 'rate_limited' });
+      await logEvent({ tenantId: cfg.tenantId, roomId, eventId: event.event_id, userId: sender, status: 'rate_limited' });
       return;
     }
 
-    await logEvent({ roomId, eventId: event.event_id, userId: sender, status: 'processing' });
+    await logEvent({ tenantId: cfg.tenantId, roomId, eventId: event.event_id, userId: sender, status: 'processing' });
 
     try {
-      const output = await this.llm.generateResponse({
-        systemPrompt: DEFAULT_BOT_SYSTEM_PROMPT,
+      const provider = this.providerFor(cfg);
+      const output = await provider.generateResponse({
+        systemPrompt: cfg.systemPrompt,
         messages: this.context.get(roomId) ?? [{ role: 'user', content: body }],
-        model: env.LLM_MODEL,
+        model: cfg.llm.model,
         roomId,
       });
       const text = output.text || 'No tengo una respuesta en este momento.';
       this.pushContext(roomId, 'assistant', text);
       await this.client.sendText(roomId, text);
       await logEvent({
+        tenantId: cfg.tenantId,
         roomId,
         eventId: event.event_id,
         userId: sender,
@@ -143,6 +171,7 @@ export class WhalabiBot {
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, roomId }, 'Error generando respuesta del bot');
       await logEvent({
+        tenantId: cfg.tenantId,
         roomId,
         eventId: event.event_id,
         userId: sender,
@@ -150,10 +179,7 @@ export class WhalabiBot {
         error: truncate(message, 500),
       });
       try {
-        await this.client.sendText(
-          roomId,
-          'Lo siento, ocurrió un error al procesar tu mensaje.',
-        );
+        await this.client.sendText(roomId, 'Lo siento, ocurrió un error al procesar tu mensaje.');
       } catch {
         // ignorar
       }
