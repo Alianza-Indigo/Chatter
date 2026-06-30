@@ -2,7 +2,13 @@
 FROM node:20-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# openssl: requerido por los engines de Prisma. ca-certificates: TLS saliente.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && corepack enable \
+ && corepack prepare pnpm@9.1.0 --activate
 WORKDIR /app
 
 FROM base AS deps

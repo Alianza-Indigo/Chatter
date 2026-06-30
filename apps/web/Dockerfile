@@ -2,7 +2,8 @@
 FROM node:20-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@9.1.0 --activate
 WORKDIR /app
 
 FROM base AS deps
