@@ -15,6 +15,8 @@
     "dev:api": "pnpm --filter @whalabi/api dev",
     "dev:bot": "pnpm --filter @whalabi/bot dev",
     "lint": "pnpm -r lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",
     "db:generate": "pnpm --filter @whalabi/api db:generate",
     "db:migrate": "pnpm --filter @whalabi/api db:migrate",
@@ -22,8 +24,9 @@
     "clean": "pnpm -r clean"
   },
   "devDependencies": {
-    "typescript": "^5.5.4",
     "@types/node": "^20.14.12",
-    "tsx": "^4.16.2"
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.9"
   }
 }
