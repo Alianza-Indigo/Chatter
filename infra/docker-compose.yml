@@ -158,7 +158,29 @@ services:
     ports:
       - "80:80"
 
+  # Alternativa recomendada para internet público: HTTPS automático (Let's Encrypt).
+  # Requiere WHALABI_DOMAIN apuntando a la IP pública y puertos 80/443 abiertos.
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+      - api
+      - synapse
+    environment:
+      WHALABI_DOMAIN: ${WHALABI_DOMAIN:-localhost}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+
 volumes:
   pg-synapse:
   pg-app:
   bot-storage:
+  caddy-data:
+  caddy-config:

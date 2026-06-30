@@ -1,0 +1,43 @@
+# Whalabi — Caddy con HTTPS automático (Let's Encrypt).
+#
+# Un solo dominio enruta por path:
+#   /_matrix, /_synapse  -> Synapse
+#   /.well-known/matrix  -> descubrimiento Matrix
+#   /api                 -> API auxiliar
+#   /                    -> frontend Next.js (PWA)
+#
+# Requisitos: el dominio WHALABI_DOMAIN debe resolver a la IP pública del
+# servidor y los puertos 80/443 deben estar abiertos (¡en OCI son DOS capas!).
+
+{$WHALABI_DOMAIN} {
+	encode gzip
+
+	# Descubrimiento Matrix (well-known)
+	handle /.well-known/matrix/server {
+		header Content-Type application/json
+		respond `{"m.server": "{$WHALABI_DOMAIN}:443"}` 200
+	}
+	handle /.well-known/matrix/client {
+		header Content-Type application/json
+		header Access-Control-Allow-Origin *
+		respond `{"m.homeserver": {"base_url": "https://{$WHALABI_DOMAIN}"}}` 200
+	}
+
+	# Matrix Client-Server API y federación
+	handle /_matrix/* {
+		reverse_proxy synapse:8008
+	}
+	handle /_synapse/client/* {
+		reverse_proxy synapse:8008
+	}
+
+	# API auxiliar de Whalabi
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	# Frontend (PWA)
+	handle {
+		reverse_proxy web:3000
+	}
+}
