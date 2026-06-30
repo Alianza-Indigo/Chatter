@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useMatrix } from '@/lib/matrix-provider';
 import { useTenant } from '@/lib/tenant-provider';
 import { useTheme } from '@/lib/theme-provider';
+import { usePush } from '@/lib/use-push';
 import { TenantBrand } from './TenantBrand';
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -22,6 +23,7 @@ export function SettingsPanel() {
   const { session } = useMatrix();
   const { tenant } = useTenant();
   const { theme, setTheme } = useTheme();
+  const push = usePush(session?.userId ?? null);
 
   return (
     <div className="mx-auto max-w-2xl p-6">
@@ -81,6 +83,43 @@ export function SettingsPanel() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="mb-1 text-base font-semibold text-slate-800 dark:text-slate-100">
+          Notificaciones
+        </h2>
+        <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+          {push.state === 'unsupported' && 'Tu navegador no soporta notificaciones push.'}
+          {push.state === 'unconfigured' &&
+            'El servidor no tiene Web Push configurado (faltan claves VAPID).'}
+          {push.state === 'denied' && 'Permiso de notificaciones bloqueado en el navegador.'}
+          {(push.state === 'idle' || push.state === 'loading') &&
+            'Recibe avisos de mensajes nuevos en este dispositivo.'}
+          {push.state === 'subscribed' && 'Notificaciones activadas en este dispositivo.'}
+        </p>
+        {push.state === 'subscribed' ? (
+          <button
+            type="button"
+            onClick={() => void push.unsubscribe()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300"
+          >
+            Desactivar
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={
+              push.state === 'unsupported' ||
+              push.state === 'unconfigured' ||
+              push.state === 'loading'
+            }
+            onClick={() => void push.subscribe()}
+            className="btn-primary text-sm"
+          >
+            {push.state === 'loading' ? 'Activando…' : 'Activar notificaciones'}
+          </button>
+        )}
       </section>
 
       <p className="text-xs text-slate-400">
