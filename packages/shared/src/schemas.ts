@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 
-export const llmProviderKindSchema = z.enum(['openai', 'ollama', 'dummy']);
+export const llmProviderKindSchema = z.enum(['openai', 'ollama', 'dummy', 'gemini']);
 export const botResponseModeSchema = z.enum(['mention', 'dm', 'always']);
 
 export const tenantBrandingSchema = z.object({

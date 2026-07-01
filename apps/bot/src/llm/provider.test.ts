@@ -3,6 +3,7 @@ import { createLLMProvider } from './index';
 import { DummyProvider } from './dummy';
 import { OpenAICompatibleProvider } from './openai';
 import { OllamaProvider } from './ollama';
+import { GeminiProvider } from './gemini';
 
 describe('createLLMProvider', () => {
   it('devuelve DummyProvider para "dummy"', () => {
@@ -27,6 +28,16 @@ describe('createLLMProvider', () => {
       apiKey: '',
     });
     expect(p).toBeInstanceOf(OllamaProvider);
+  });
+
+  it('devuelve GeminiProvider para "gemini"', () => {
+    const p = createLLMProvider({
+      provider: 'gemini',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      apiKey: 'AIza-test',
+    });
+    expect(p).toBeInstanceOf(GeminiProvider);
+    expect(p.kind).toBe('gemini');
   });
 });
 

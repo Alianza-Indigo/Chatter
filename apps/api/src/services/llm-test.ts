@@ -34,6 +34,28 @@ export async function testTenantBot(
   }
 
   try {
+    if (provider === 'gemini') {
+      const base = baseUrl.replace(/\/openai\/?$/, '').replace(/\/$/, '');
+      const res = await fetch(`${base}/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+        }),
+      });
+      if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
+      const data = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const output = (data.candidates?.[0]?.content?.parts ?? [])
+        .map((p) => p.text ?? '')
+        .join('')
+        .trim();
+      return { ok: true, provider, model, output, latencyMs: Date.now() - start };
+    }
+
     if (provider === 'ollama') {
       const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/chat`, {
         method: 'POST',

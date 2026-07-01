@@ -17,6 +17,7 @@ enum LlmProvider {
   openai
   ollama
   dummy
+  gemini
 }
 
 enum BotResponseMode {

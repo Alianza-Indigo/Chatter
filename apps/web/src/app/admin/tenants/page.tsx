@@ -223,7 +223,8 @@ function TenantForm({
         <Field label="Proveedor LLM">
           <select className="input" value={form.llmProvider} onChange={(e) => set('llmProvider', e.target.value as Tenant['llmProvider'])}>
             <option value="dummy">Dummy (demo)</option>
-            <option value="openai">OpenAI-compatible (incl. Gemini)</option>
+            <option value="gemini">Gemini + búsqueda web (tiempo real)</option>
+            <option value="openai">OpenAI-compatible (incl. Gemini sin web)</option>
             <option value="ollama">Ollama / local</option>
           </select>
         </Field>

@@ -32,8 +32,14 @@ describe('createTenantSchema', () => {
 
   it('rechaza un provider LLM desconocido', () => {
     expect(
-      createTenantSchema.safeParse({ ...validTenant, llmProvider: 'gemini' }).success,
+      createTenantSchema.safeParse({ ...validTenant, llmProvider: 'cohere' }).success,
     ).toBe(false);
+  });
+
+  it('acepta el provider gemini', () => {
+    expect(
+      createTenantSchema.safeParse({ ...validTenant, llmProvider: 'gemini' }).success,
+    ).toBe(true);
   });
 });
 

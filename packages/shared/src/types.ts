@@ -7,7 +7,7 @@
  * en Matrix/Synapse y se modela con los tipos de matrix-js-sdk.
  */
 
-export type LlmProviderKind = 'openai' | 'ollama' | 'dummy';
+export type LlmProviderKind = 'openai' | 'ollama' | 'dummy' | 'gemini';
 
 /** Modos en los que el bot decide responder en un room. */
 export type BotResponseMode = 'mention' | 'dm' | 'always';
