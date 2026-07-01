@@ -141,12 +141,17 @@ services:
       context: ..
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        # Vacío por defecto: la web llama a /api en su mismo origen y Next.js lo
+        # reenvía a la API (API_INTERNAL_URL). El "-" preserva el valor vacío.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL-}
         NEXT_PUBLIC_MATRIX_HOMESERVER_URL: ${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-http://localhost:8008}
         NEXT_PUBLIC_MATRIX_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
     restart: unless-stopped
     depends_on:
       - api
+    environment:
+      # Destino interno del proxy /api (red de Docker).
+      API_INTERNAL_URL: http://api:4000
     ports:
       - "3000:3000"
 
