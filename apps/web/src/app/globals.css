@@ -19,6 +19,9 @@ body {
 .app-viewport {
   height: 100vh;
   height: 100dvh;
+  /* --app-height lo fija JS con visualViewport (altura visible real en móvil).
+     Si no está definido, cae a 100dvh. */
+  height: var(--app-height, 100dvh);
 }
 
 /* Contenedor con scroll táctil fiable dentro de la app instalada. Sin esto, en
