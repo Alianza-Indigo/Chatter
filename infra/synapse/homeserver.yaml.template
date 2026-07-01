@@ -35,17 +35,17 @@ database:
 log_config: "/data/log.config"
 media_store_path: /data/media_store
 
-# --- Registro controlado ---
-# El registro abierto vía web se controla por tenant en Whalabi. A nivel de
-# Synapse se deja deshabilitado por defecto; el provisioning usa la API admin
-# con el registration_shared_secret.
-enable_registration: false
-enable_registration_without_verification: false
+# --- Registro controlado por token ---
+# El auto-registro vía web está habilitado, pero SIEMPRE requiere un token de
+# registro válido. Así los usuarios se dan de alta solos (sin crearlos uno por
+# uno con la API admin), pero un dominio público como whalabi.app queda
+# protegido contra spam de bots: sin token no se puede crear cuenta.
+# Los tokens se emiten con la Synapse Admin API (registration_tokens/new) y se
+# comparten con las personas autorizadas de la organización.
+enable_registration: true
+enable_registration_without_verification: true
+registration_requires_token: true
 registration_shared_secret: "${MATRIX_REGISTRATION_SHARED_SECRET}"
-
-# Para permitir registro abierto controlado por token, descomentar:
-# enable_registration: true
-# registration_requires_token: true
 
 # --- Federación ---
 # Opcional. Para una instancia privada por organización, mantener cerrada.
