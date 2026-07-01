@@ -61,6 +61,9 @@ export interface TimelineMessage {
   /** Para m.image / m.file: URL http descargable y nombre. */
   mediaUrl: string | null;
   fileName: string | null;
+  /** Para m.image: dimensiones originales (para reservar espacio y evitar reflow). */
+  mediaWidth: number | null;
+  mediaHeight: number | null;
 }
 
 export interface RoomMember {

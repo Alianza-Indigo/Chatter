@@ -657,9 +657,14 @@ export class WhalabiMatrixClient {
     const msgtype = (content.msgtype as string) ?? MsgType.Text;
     let mediaUrl: string | null = null;
     let fileName: string | null = null;
+    let mediaWidth: number | null = null;
+    let mediaHeight: number | null = null;
     if ((msgtype === MsgType.Image || msgtype === MsgType.File) && typeof content.url === 'string') {
       mediaUrl = this.client?.mxcUrlToHttp(content.url) ?? null;
       fileName = (content.body as string) ?? null;
+      const info = content.info as { w?: number; h?: number } | undefined;
+      mediaWidth = typeof info?.w === 'number' ? info.w : null;
+      mediaHeight = typeof info?.h === 'number' ? info.h : null;
     }
 
     return {
@@ -679,6 +684,8 @@ export class WhalabiMatrixClient {
       replyToPreview: replyToEventId ? bodyById.get(replyToEventId) ?? null : null,
       mediaUrl,
       fileName,
+      mediaWidth,
+      mediaHeight,
     };
   }
 }

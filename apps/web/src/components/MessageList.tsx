@@ -74,8 +74,17 @@ function MessageBubble({
             )}
 
             {m.mediaUrl && m.msgtype === 'm.image' ? (
+              // width/height le dan al navegador la relación de aspecto para
+              // reservar el espacio ANTES de cargar la imagen y evitar el salto
+              // de scroll al cruzarla. max-h-64 la limita visualmente.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.mediaUrl} alt={m.fileName ?? ''} className="max-h-64 rounded-lg" />
+              <img
+                src={m.mediaUrl}
+                alt={m.fileName ?? ''}
+                width={m.mediaWidth ?? undefined}
+                height={m.mediaHeight ?? undefined}
+                className="max-h-64 w-auto max-w-full rounded-lg"
+              />
             ) : m.mediaUrl ? (
               <a href={m.mediaUrl} target="_blank" rel="noreferrer" className="underline">
                 📎 {m.fileName ?? 'archivo'}
