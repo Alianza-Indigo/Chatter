@@ -8,6 +8,11 @@ const envSchema = z.object({
 
   MATRIX_DEFAULT_HOMESERVER_URL: z.string().url().default('http://localhost:8008'),
   MATRIX_DEFAULT_SERVER_NAME: z.string().default('whalabi.local'),
+  // Credenciales de administrador de Matrix para la Synapse Admin API.
+  MATRIX_ADMIN_USER: z.string().optional().default(''),
+  MATRIX_ADMIN_PASSWORD: z.string().optional().default(''),
+  // URL pública (para construir ligas de invitación).
+  APP_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
 
   ADMIN_API_TOKEN: z.string().min(1).default('change-me-admin-api-token'),
   ADMIN_JWT_SECRET: z.string().min(1).default('change-me-please-a-long-random-secret'),

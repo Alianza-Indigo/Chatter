@@ -90,6 +90,9 @@ services:
       DATABASE_URL: postgresql://whalabi:whalabi@postgres-app:5432/whalabi?schema=public
       MATRIX_DEFAULT_HOMESERVER_URL: http://synapse:8008
       MATRIX_DEFAULT_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
+      MATRIX_ADMIN_USER: ${MATRIX_ADMIN_USER:-}
+      MATRIX_ADMIN_PASSWORD: ${MATRIX_ADMIN_PASSWORD:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-change-me-admin-api-token}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-change-me-please-a-long-random-secret}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}

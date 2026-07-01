@@ -34,6 +34,19 @@ enum BotLogStatus {
   error
 }
 
+enum MemberRole {
+  owner
+  admin
+  user
+}
+
+enum InvitationStatus {
+  pending
+  accepted
+  expired
+  revoked
+}
+
 /// Una organización dentro de Whalabi, resuelta por dominio público.
 model Tenant {
   id               String          @id @default(cuid())
@@ -72,6 +85,8 @@ model Tenant {
 
   botLogs          BotLog[]
   pushSubscriptions PushSubscription[]
+  invitations      Invitation[]
+  auditLogs        AuditLog[]
 
   @@index([publicDomain])
   @@index([slug])
@@ -107,4 +122,47 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([tenantId, userId])
+}
+
+/// Invitación institucional: liga de activación con rol y rooms asignados.
+/// El usuario Matrix se crea al aceptar (vía Synapse Admin API).
+model Invitation {
+  id         String           @id @default(cuid())
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId   String
+  email      String
+  /// localpart deseado del futuro MXID (@localpart:server).
+  localpart  String
+  role       MemberRole       @default(user)
+  /// Rooms (IDs o alias) a los que se unirá al aceptar.
+  roomIds    String[]         @default([])
+  /// Token de activación (se envía en la liga; único).
+  token      String           @unique
+  status     InvitationStatus @default(pending)
+  expiresAt  DateTime
+  createdBy  String?
+  acceptedAt DateTime?
+  createdAt  DateTime         @default(now())
+
+  @@index([tenantId, status])
+  @@index([email])
+}
+
+/// Registro de auditoría de acciones administrativas.
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantId  String?
+  /// Quién ejecutó la acción (identificador de admin).
+  actor     String
+  /// Acción realizada, ej. "tenant.update", "user.create", "invitation.revoke".
+  action    String
+  /// Objetivo de la acción (id de tenant, MXID de usuario, etc.).
+  target    String?
+  /// Detalles adicionales no sensibles.
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([action])
 }

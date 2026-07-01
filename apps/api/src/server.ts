@@ -9,6 +9,9 @@ import { tenantRoutes } from './routes/tenant.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { pushRoutes } from './routes/push.js';
+import { userRoutes } from './routes/users.js';
+import { invitationAdminRoutes, invitationPublicRoutes } from './routes/invitations.js';
+import { observabilityRoutes } from './routes/observability.js';
 
 /** Construye la instancia Fastify con middlewares, CORS y manejo de errores. */
 export async function buildServer() {
@@ -41,7 +44,11 @@ export async function buildServer() {
   await app.register(tenantRoutes);
   await app.register(authRoutes);
   await app.register(pushRoutes);
+  await app.register(invitationPublicRoutes);
   await app.register(adminRoutes);
+  await app.register(userRoutes);
+  await app.register(invitationAdminRoutes);
+  await app.register(observabilityRoutes);
 
   return app;
 }
