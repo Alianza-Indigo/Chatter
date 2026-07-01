@@ -4,10 +4,12 @@ import { config } from './config';
 /** Resuelve la configuración pública del tenant según el dominio actual. */
 export async function fetchTenantConfig(domain?: string): Promise<PublicTenantConfig> {
   const host = domain ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
-  const url = new URL('/api/config/public', config.apiUrl);
-  url.searchParams.set('domain', host);
-
-  const res = await fetch(url.toString(), { headers: { accept: 'application/json' } });
+  // Concatenación de string (no `new URL`): config.apiUrl puede ser '' (mismo
+  // origen, proxy), y `new URL(path, '')` lanzaría excepción.
+  const qs = new URLSearchParams({ domain: host }).toString();
+  const res = await fetch(`${config.apiUrl}/api/config/public?${qs}`, {
+    headers: { accept: 'application/json' },
+  });
   if (!res.ok) {
     throw new Error(`No se pudo resolver el tenant (${res.status}).`);
   }
