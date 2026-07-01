@@ -76,30 +76,56 @@ export class WhalabiMatrixClient {
 
   async register(params: RegisterParams): Promise<WhalabiSession> {
     const tmp = createClient({ baseUrl: params.homeserverUrl });
+    const base = {
+      username: params.username,
+      password: params.password,
+      initial_device_display_name: 'Whalabi Web',
+    };
 
-    const doRegister = (auth?: Record<string, unknown>) =>
-      tmp.registerRequest({
-        username: params.username,
-        password: params.password,
-        ...(auth ? { auth: auth as never } : {}),
-        initial_device_display_name: 'Whalabi Web',
-      });
+    // Recorre las etapas de autenticación interactiva (UIA): soporta el flujo de
+    // token de registro (m.login.registration_token) seguido de m.login.dummy.
+    let session: string | undefined;
+    let completed: string[] = [];
+    let flows: Array<{ stages: string[] }> = [];
 
-    try {
-      const res = await doRegister();
-      return this.sessionFromRegister(res, params.homeserverUrl);
-    } catch (err: unknown) {
-      const e = err as { httpStatus?: number; data?: { session?: string } };
-      if (e.httpStatus === 401 && e.data?.session) {
-        const session = e.data.session;
-        const auth = params.registrationToken
-          ? { type: 'm.login.registration_token', token: params.registrationToken, session }
-          : { type: 'm.login.dummy', session };
-        const res = await doRegister(auth);
-        return this.sessionFromRegister(res, params.homeserverUrl);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      let auth: Record<string, unknown> | undefined;
+      if (session) {
+        const flow =
+          flows.find((f) =>
+            f.stages.every((s) => s === 'm.login.dummy' || s === 'm.login.registration_token'),
+          ) ?? flows[0];
+        const next = flow?.stages.find((s) => !completed.includes(s));
+        if (!next || next === 'm.login.dummy') {
+          auth = { type: 'm.login.dummy', session };
+        } else if (next === 'm.login.registration_token') {
+          if (!params.registrationToken) {
+            throw new Error('Se requiere un token de registro para crear la cuenta.');
+          }
+          auth = { type: 'm.login.registration_token', token: params.registrationToken, session };
+        } else {
+          throw new Error(`El registro requiere un paso no soportado: ${next}`);
+        }
       }
-      throw err;
+
+      try {
+        const res = await tmp.registerRequest({ ...base, ...(auth ? { auth: auth as never } : {}) });
+        return this.sessionFromRegister(res, params.homeserverUrl);
+      } catch (err: unknown) {
+        const e = err as {
+          httpStatus?: number;
+          data?: { session?: string; flows?: Array<{ stages: string[] }>; completed?: string[] };
+        };
+        if (e.httpStatus === 401 && e.data?.session) {
+          session = e.data.session;
+          completed = e.data.completed ?? completed;
+          flows = e.data.flows ?? flows;
+          continue;
+        }
+        throw err;
+      }
     }
+    throw new Error('No se pudo completar el registro (demasiados pasos de autenticación).');
   }
 
   private sessionFromRegister(
