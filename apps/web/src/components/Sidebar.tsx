@@ -7,7 +7,7 @@ import { TenantBrand } from './TenantBrand';
 import { RoomList } from './RoomList';
 import { UserProfile } from './UserProfile';
 import { InstallPWAButton } from './InstallPWAButton';
-import { CreateRoomModal } from './RoomModals';
+import { CreateRoomModal, NewChatModal } from './RoomModals';
 
 export function Sidebar({
   rooms,
@@ -22,6 +22,7 @@ export function Sidebar({
 }) {
   const { theme, toggle } = useTheme();
   const [creating, setCreating] = useState(false);
+  const [newChat, setNewChat] = useState(false);
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -55,13 +56,23 @@ export function Sidebar({
       </div>
 
       <div className="space-y-2 px-3 py-2">
-        <button type="button" onClick={() => setCreating(true)} className="btn-primary w-full text-sm">
-          + Nuevo room
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setNewChat(true)} className="btn-primary flex-1 text-sm">
+            💬 Nuevo chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="Crear un grupo"
+          >
+            + Grupo
+          </button>
+        </div>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar rooms…"
+          placeholder="Buscar chats…"
           className="input py-1.5 text-sm"
         />
       </div>
@@ -74,6 +85,11 @@ export function Sidebar({
         <UserProfile />
       </div>
 
+      <NewChatModal
+        open={newChat}
+        onClose={() => setNewChat(false)}
+        onCreated={(roomId) => onSelect(roomId)}
+      />
       <CreateRoomModal
         open={creating}
         onClose={() => setCreating(false)}

@@ -15,6 +15,7 @@ import type {
   RoomSummary,
   TimelineMessage,
   RoomMember,
+  UserSearchResult,
   WhalabiSession,
 } from '@whalabi/matrix';
 import { clearSession, loadSession, saveSession } from './session';
@@ -39,6 +40,8 @@ interface MatrixContextValue {
   sendTyping: (roomId: string, isTyping: boolean) => Promise<void>;
   createRoom: (opts: { name?: string; invite?: string[]; isDirect?: boolean }) => Promise<string>;
   invite: (roomId: string, userId: string) => Promise<void>;
+  searchUsers: (term: string) => Promise<UserSearchResult[]>;
+  startDirectMessage: (userId: string) => Promise<string>;
   setRoomName: (roomId: string, name: string) => Promise<void>;
   getMembers: (roomId: string) => RoomMember[];
   getTimeline: (roomId: string) => TimelineMessage[];
@@ -140,6 +143,8 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       sendTyping: (roomId, isTyping) => client.sendTyping(roomId, isTyping),
       createRoom: (opts) => client.createRoom(opts),
       invite: (roomId, userId) => client.invite(roomId, userId),
+      searchUsers: (term) => client.searchUsers(term),
+      startDirectMessage: (userId) => client.startDirectMessage(userId),
       setRoomName: (roomId, name) => client.setRoomName(roomId, name),
       getMembers: (roomId) => client.getMembers(roomId),
       getTimeline: (roomId) => client.getTimeline(roomId),

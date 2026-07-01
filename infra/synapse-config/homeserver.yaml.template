@@ -57,6 +57,15 @@ registration_shared_secret: "${MATRIX_REGISTRATION_SHARED_SECRET}"
 federation_domain_whitelist: []
 # Para abrir federación, eliminar la whitelist vacía anterior.
 
+# --- Directorio de usuarios (estilo "contactos" de WhatsApp) ---
+# Permite que cualquier usuario encuentre a cualquier otro por nombre/usuario y
+# le escriba directo, sin necesidad de compartir un room antes. Sin esto, Synapse
+# solo muestra a personas con las que ya compartes una conversación.
+user_directory:
+  enabled: true
+  search_all_users: true
+  prefer_local_users: true
+
 # --- Retención / privacidad ---
 # Whalabi no requiere E2EE para funcionar (ver docs/matrix.md). El cifrado
 # E2EE de Matrix puede activarse a nivel de cliente; este scaffold NO lo

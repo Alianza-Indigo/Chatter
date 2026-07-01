@@ -76,3 +76,10 @@ export interface UserProfile {
   displayName: string | null;
   avatarUrl: string | null;
 }
+
+/** Resultado de una búsqueda en el directorio de usuarios (tipo "contactos"). */
+export interface UserSearchResult {
+  userId: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+}

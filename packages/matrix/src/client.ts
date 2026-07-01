@@ -31,6 +31,7 @@ import type {
   MessageReaction,
   RoomMember,
   UserProfile,
+  UserSearchResult,
   WhalabiSession,
 } from './types';
 
@@ -256,6 +257,56 @@ export class WhalabiMatrixClient {
   async invite(roomId: string, userId: string): Promise<void> {
     if (!this.client) throw new Error('Cliente no inicializado');
     await this.client.invite(roomId, userId);
+  }
+
+  /** Busca personas en el directorio del homeserver (estilo "contactos"). */
+  async searchUsers(term: string, limit = 20): Promise<UserSearchResult[]> {
+    if (!this.client || !term.trim()) return [];
+    const res = await this.client.searchUserDirectory({ term: term.trim(), limit });
+    const myId = this.session?.userId;
+    return res.results
+      .filter((u) => u.user_id !== myId)
+      .map((u) => ({
+        userId: u.user_id,
+        displayName: u.display_name ?? null,
+        avatarUrl: u.avatar_url
+          ? this.client?.mxcUrlToHttp(u.avatar_url, 64, 64, 'crop') ?? null
+          : null,
+      }));
+  }
+
+  /**
+   * Abre un chat directo (1 a 1) con un usuario, reusando el DM existente si lo
+   * hay. Es el flujo tipo WhatsApp: buscar a la persona y escribirle directo.
+   */
+  async startDirectMessage(userId: string): Promise<string> {
+    if (!this.client) throw new Error('Cliente no inicializado');
+    const existing = this.findDirectRoom(userId);
+    if (existing) return existing;
+    const roomId = await this.createRoom({ invite: [userId], isDirect: true });
+    await this.recordDirect(userId, roomId);
+    return roomId;
+  }
+
+  /** Busca un DM ya existente (unido) con el usuario dado. */
+  private findDirectRoom(userId: string): string | null {
+    if (!this.client) return null;
+    const directEvent = this.client.getAccountData(EventType.Direct);
+    const content = directEvent?.getContent<Record<string, string[]>>() ?? {};
+    for (const rid of content[userId] ?? []) {
+      const room = this.client.getRoom(rid);
+      if (room && room.getMyMembership() === 'join') return rid;
+    }
+    return null;
+  }
+
+  /** Registra el room como DM del usuario en m.direct (account data). */
+  private async recordDirect(userId: string, roomId: string): Promise<void> {
+    if (!this.client) return;
+    const directEvent = this.client.getAccountData(EventType.Direct);
+    const content = { ...(directEvent?.getContent<Record<string, string[]>>() ?? {}) };
+    content[userId] = [...(content[userId] ?? []), roomId];
+    await this.client.setAccountData(EventType.Direct, content);
   }
 
   /** Miembros del room (unidos e invitados). */
