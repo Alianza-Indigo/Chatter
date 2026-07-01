@@ -17,9 +17,13 @@ FROM deps AS build
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_MATRIX_HOMESERVER_URL
 ARG NEXT_PUBLIC_MATRIX_SERVER_NAME
+# Next.js evalúa los rewrites() en BUILD time: el destino del proxy /api debe
+# estar disponible aquí, no solo en runtime. Por defecto el servicio "api".
+ARG API_INTERNAL_URL=http://api:4000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_MATRIX_HOMESERVER_URL=$NEXT_PUBLIC_MATRIX_HOMESERVER_URL
 ENV NEXT_PUBLIC_MATRIX_SERVER_NAME=$NEXT_PUBLIC_MATRIX_SERVER_NAME
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
 COPY packages ./packages
 COPY apps/web ./apps/web
 RUN pnpm --filter @whalabi/web build

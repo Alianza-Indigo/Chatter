@@ -146,11 +146,13 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL-}
         NEXT_PUBLIC_MATRIX_HOMESERVER_URL: ${NEXT_PUBLIC_MATRIX_HOMESERVER_URL:-http://localhost:8008}
         NEXT_PUBLIC_MATRIX_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
+        # Destino del proxy /api, horneado en build (Next evalúa rewrites en build).
+        API_INTERNAL_URL: http://api:4000
     restart: unless-stopped
     depends_on:
       - api
     environment:
-      # Destino interno del proxy /api (red de Docker).
+      # También en runtime (por si Next lo re-lee); el valor de build es el que aplica.
       API_INTERNAL_URL: http://api:4000
     ports:
       - "3000:3000"
