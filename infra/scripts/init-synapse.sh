@@ -8,7 +8,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Volumen de datos en vivo de Synapse (propiedad del usuario del contenedor, UID 991).
 SYNAPSE_DIR="$ROOT_DIR/infra/synapse"
+# Config versionada en git (propiedad de quien clona el repo). Se mantiene FUERA
+# del volumen para que `git pull` nunca tenga que escribir dentro de una carpeta
+# que no le pertenece (esa era la causa de los conflictos de permisos en deploy).
+CONFIG_DIR="$ROOT_DIR/infra/synapse-config"
 
 # Cargar .env si existe
 if [[ -f "$ROOT_DIR/.env" ]]; then
@@ -33,12 +38,13 @@ if [[ ! -f "$SYNAPSE_DIR/homeserver.yaml" ]]; then
     matrixdotorg/synapse:latest generate
 fi
 
-echo "==> Aplicando plantilla de Whalabi (homeserver.yaml)…"
+echo "==> Aplicando config de Whalabi (homeserver.yaml + log.config)…"
 
-# 2) Renderizar la plantilla con sustitución de variables.
+# 2) Renderizar la plantilla (desde CONFIG_DIR, versionada) hacia el volumen.
 #    El paso `generate` deja $SYNAPSE_DIR como propiedad del usuario de Synapse
 #    (UID 991), así que se escribe con `sudo tee`: el archivo queda legible por
 #    Synapse y la carpeta sigue siendo suya para escribir sus datos en runtime.
+#    git nunca toca $SYNAPSE_DIR porque la fuente vive en $CONFIG_DIR.
 : "${RECAPTCHA_PUBLIC_KEY:=}"
 : "${RECAPTCHA_PRIVATE_KEY:=}"
 export MATRIX_DEFAULT_SERVER_NAME APP_PUBLIC_URL MATRIX_REGISTRATION_SHARED_SECRET
@@ -46,8 +52,11 @@ export RECAPTCHA_PUBLIC_KEY RECAPTCHA_PRIVATE_KEY
 WRITE="tee"
 if [[ ! -w "$SYNAPSE_DIR" ]]; then WRITE="sudo tee"; fi
 envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET} ${RECAPTCHA_PUBLIC_KEY} ${RECAPTCHA_PRIVATE_KEY}' \
-  < "$SYNAPSE_DIR/homeserver.yaml.template" \
+  < "$CONFIG_DIR/homeserver.yaml.template" \
   | $WRITE "$SYNAPSE_DIR/homeserver.yaml" > /dev/null
+
+# Copiar log.config al volumen (homeserver.yaml lo referencia como /data/log.config).
+$WRITE "$SYNAPSE_DIR/log.config" < "$CONFIG_DIR/log.config" > /dev/null
 
 echo "==> Listo. Arranca Synapse con:"
 echo "    docker compose -f infra/docker-compose.yml up -d postgres-synapse synapse"

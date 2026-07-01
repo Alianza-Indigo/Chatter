@@ -5,13 +5,16 @@ Client-Server API ni se inventan webhooks.
 
 ## Configuración
 
-La plantilla `infra/synapse/homeserver.yaml.template` se renderiza con
-`init-synapse.sh` usando variables del `.env`. Puntos clave:
+La plantilla `infra/synapse-config/homeserver.yaml.template` se renderiza con
+`init-synapse.sh` usando variables del `.env`. La config versionada vive en
+`infra/synapse-config/` (fuera del volumen de datos), y el script la renderiza/copia
+hacia `infra/synapse/` (el volumen en vivo, propiedad del usuario del contenedor).
+Así `git pull` nunca escribe dentro de la carpeta de datos de Synapse. Puntos clave:
 
 - **Base de datos:** PostgreSQL (`postgres-synapse`), no SQLite, para producción.
 - **Listener:** puerto `8008` HTTP (TLS terminado en el proxy).
-- **Registro:** `enable_registration: false` por defecto. El registro de usuarios se
-  controla por tenant en Whalabi y/o por token de registro de Synapse.
+- **Registro:** auto-registro abierto protegido con reCAPTCHA v2
+  (`enable_registration_captcha`), configurable por tenant en Whalabi.
 - **Federación:** cerrada por defecto (`federation_domain_whitelist: []`). Para una
   instancia privada por organización, mantenerla cerrada.
 - **URL preview:** deshabilitado por privacidad.
