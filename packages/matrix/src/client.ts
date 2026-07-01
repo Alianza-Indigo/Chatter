@@ -188,6 +188,8 @@ export class WhalabiMatrixClient {
     client.on(ClientEvent.Sync, (state: string) => {
       this.syncHandlers.forEach((h) => h(state));
       if (state === 'PREPARED' || state === 'SYNCING') this.emitRooms();
+      // Al terminar el primer sync, unirse a cualquier invitación pendiente.
+      if (state === 'PREPARED') this.autoJoinInvites();
     });
 
     // Un room recién creado/entrado (p. ej. al abrir un chat directo) o un cambio
@@ -195,7 +197,16 @@ export class WhalabiMatrixClient {
     // siguiente ciclo de sync. Sin esto, al iniciar un chat el room no aparece a
     // tiempo y la conversación no se abre.
     client.on(ClientEvent.Room, () => this.emitRooms());
-    client.on(RoomEvent.MyMembership, () => this.emitRooms());
+    client.on(RoomEvent.MyMembership, (room: Room, membership: string) => {
+      this.emitRooms();
+      // Estilo WhatsApp: que te escriban o te agreguen simplemente funciona, sin
+      // tener que "aceptar" una invitación. Al recibir una, nos unimos solos.
+      if (membership === 'invite') {
+        client.joinRoom(room.roomId).catch(() => {
+          /* si falla el auto-join, el room igual aparece como invitación */
+        });
+      }
+    });
 
     client.on(RoomEvent.Timeline, (_ev: MatrixEvent, room?: Room) => {
       this.emitRooms();
@@ -224,6 +235,18 @@ export class WhalabiMatrixClient {
     this.client?.stopClient();
   }
 
+  /** Se une automáticamente a las invitaciones pendientes (experiencia WhatsApp). */
+  private autoJoinInvites(): void {
+    if (!this.client) return;
+    for (const room of this.client.getRooms()) {
+      if (room.getMyMembership() === 'invite') {
+        this.client.joinRoom(room.roomId).catch(() => {
+          /* mejor esfuerzo */
+        });
+      }
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Rooms
   // -------------------------------------------------------------------------
@@ -232,7 +255,9 @@ export class WhalabiMatrixClient {
     if (!this.client) return [];
     return this.client
       .getRooms()
-      .filter((r) => r.getMyMembership() === 'join')
+      // Incluir invitaciones además de rooms unidos: aunque el auto-join tarde un
+      // instante, la conversación se ve de inmediato en la lista.
+      .filter((r) => ['join', 'invite'].includes(r.getMyMembership() ?? ''))
       .map((r) => this.toRoomSummary(r))
       .sort((a, b) => (b.lastTs ?? 0) - (a.lastTs ?? 0));
   }
