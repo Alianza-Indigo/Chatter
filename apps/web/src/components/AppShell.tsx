@@ -110,7 +110,7 @@ export function AppShell() {
               }}
               onBack={() => setActiveRoomId(null)}
             />
-            <div className="min-h-0 flex-1 bg-slate-100 dark:bg-slate-950">
+            <div className="relative min-h-0 flex-1 bg-slate-100 dark:bg-slate-950">
               <MessageList
                 messages={messages}
                 onReply={setReplyTo}
