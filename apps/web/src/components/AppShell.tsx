@@ -39,20 +39,23 @@ export function AppShell() {
     [rooms, activeRoomId],
   );
 
-  // Fija la altura real de la ventana en móvil. La barra de direcciones y el
-  // teclado cambian la zona visible; dvh/vh no siempre lo reflejan (por eso en
-  // "modo escritorio" sí scrollea). visualViewport da la altura visible exacta.
+  // Fija la altura real de la ventana en móvil. OJO: al hacer scroll, la barra de
+  // direcciones se colapsa y dispara "resize" continuamente; si recalculáramos la
+  // altura en cada uno, el scroll se traba a media pasada. Por eso solo aplicamos
+  // cambios GRANDES (girar el teléfono, abrir/cerrar el teclado), ignorando el
+  // micro-ajuste de la barra durante el scroll.
   useEffect(() => {
+    let last = 0;
     const setHeight = () => {
       const h = window.visualViewport?.height ?? window.innerHeight;
+      if (Math.abs(h - last) < 120) return; // ignora el vaivén de la barra al scrollear
+      last = h;
       document.documentElement.style.setProperty('--app-height', `${h}px`);
     };
     setHeight();
-    window.addEventListener('resize', setHeight);
     window.addEventListener('orientationchange', setHeight);
     window.visualViewport?.addEventListener('resize', setHeight);
     return () => {
-      window.removeEventListener('resize', setHeight);
       window.removeEventListener('orientationchange', setHeight);
       window.visualViewport?.removeEventListener('resize', setHeight);
     };
