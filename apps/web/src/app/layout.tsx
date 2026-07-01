@@ -12,6 +12,11 @@ export const metadata: Metadata = {
     title: 'Whalabi',
     statusBarStyle: 'black-translucent',
   },
+  // Estándar moderno (Chrome/Android); complementa al meta de Apple y silencia
+  // el aviso de deprecación en consola.
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
   icons: {
     icon: '/icons/icon.svg',
     apple: '/icons/icon.svg',
