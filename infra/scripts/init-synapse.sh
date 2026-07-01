@@ -39,10 +39,13 @@ echo "==> Aplicando plantilla de Whalabi (homeserver.yaml)…"
 #    El paso `generate` deja $SYNAPSE_DIR como propiedad del usuario de Synapse
 #    (UID 991), así que se escribe con `sudo tee`: el archivo queda legible por
 #    Synapse y la carpeta sigue siendo suya para escribir sus datos en runtime.
+: "${RECAPTCHA_PUBLIC_KEY:=}"
+: "${RECAPTCHA_PRIVATE_KEY:=}"
 export MATRIX_DEFAULT_SERVER_NAME APP_PUBLIC_URL MATRIX_REGISTRATION_SHARED_SECRET
+export RECAPTCHA_PUBLIC_KEY RECAPTCHA_PRIVATE_KEY
 WRITE="tee"
 if [[ ! -w "$SYNAPSE_DIR" ]]; then WRITE="sudo tee"; fi
-envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET}' \
+envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET} ${RECAPTCHA_PUBLIC_KEY} ${RECAPTCHA_PRIVATE_KEY}' \
   < "$SYNAPSE_DIR/homeserver.yaml.template" \
   | $WRITE "$SYNAPSE_DIR/homeserver.yaml" > /dev/null
 

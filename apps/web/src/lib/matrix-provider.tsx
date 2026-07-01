@@ -25,12 +25,13 @@ interface MatrixContextValue {
   session: WhalabiSession | null;
   rooms: RoomSummary[];
   login: (homeserverUrl: string, user: string, password: string) => Promise<void>;
-  register: (
-    homeserverUrl: string,
-    username: string,
-    password: string,
-    registrationToken?: string,
-  ) => Promise<void>;
+  register: (params: {
+    homeserverUrl: string;
+    username: string;
+    password: string;
+    registrationToken?: string;
+    captchaResponse?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   sendMessage: (roomId: string, body: string, replyTo?: string) => Promise<void>;
   sendAttachment: (roomId: string, file: File) => Promise<void>;
@@ -105,9 +106,9 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     [client],
   );
 
-  const register = useCallback(
-    async (homeserverUrl: string, username: string, password: string, registrationToken?: string) => {
-      const s = await client.register({ homeserverUrl, username, password, registrationToken });
+  const register = useCallback<MatrixContextValue['register']>(
+    async (params) => {
+      const s = await client.register(params);
       saveSession(s);
       client.restore(s);
       await client.startSync();

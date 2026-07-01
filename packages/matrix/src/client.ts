@@ -82,8 +82,10 @@ export class WhalabiMatrixClient {
       initial_device_display_name: 'Whalabi Web',
     };
 
-    // Recorre las etapas de autenticación interactiva (UIA): soporta el flujo de
-    // token de registro (m.login.registration_token) seguido de m.login.dummy.
+    // Recorre las etapas de autenticación interactiva (UIA). Soporta los flujos
+    // habituales de Synapse: reCAPTCHA (m.login.recaptcha) y/o token de registro
+    // (m.login.registration_token), cerrando con m.login.dummy.
+    const SUPPORTED = ['m.login.recaptcha', 'm.login.registration_token', 'm.login.dummy'];
     let session: string | undefined;
     let completed: string[] = [];
     let flows: Array<{ stages: string[] }> = [];
@@ -91,13 +93,15 @@ export class WhalabiMatrixClient {
     for (let attempt = 0; attempt < 5; attempt++) {
       let auth: Record<string, unknown> | undefined;
       if (session) {
-        const flow =
-          flows.find((f) =>
-            f.stages.every((s) => s === 'm.login.dummy' || s === 'm.login.registration_token'),
-          ) ?? flows[0];
+        const flow = flows.find((f) => f.stages.every((s) => SUPPORTED.includes(s))) ?? flows[0];
         const next = flow?.stages.find((s) => !completed.includes(s));
         if (!next || next === 'm.login.dummy') {
           auth = { type: 'm.login.dummy', session };
+        } else if (next === 'm.login.recaptcha') {
+          if (!params.captchaResponse) {
+            throw new Error('Completa el CAPTCHA para crear la cuenta.');
+          }
+          auth = { type: 'm.login.recaptcha', response: params.captchaResponse, session };
         } else if (next === 'm.login.registration_token') {
           if (!params.registrationToken) {
             throw new Error('Se requiere un token de registro para crear la cuenta.');

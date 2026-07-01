@@ -5,21 +5,27 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useMatrix } from '@/lib/matrix-provider';
 import { useTenant } from '@/lib/tenant-provider';
+import { useTheme } from '@/lib/theme-provider';
 import { config } from '@/lib/config';
 import { TenantBrand } from './TenantBrand';
+import { Recaptcha } from './Recaptcha';
 
 export function RegisterForm() {
   const router = useRouter();
   const { register } = useMatrix();
   const { tenant } = useTenant();
+  const { theme } = useTheme();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [captcha, setCaptcha] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const homeserver = tenant?.matrixBaseUrl ?? config.defaultHomeserver;
+  const siteKey = config.recaptchaSiteKey;
 
   if (tenant && !tenant.allowRegistration) {
     return (
@@ -43,17 +49,35 @@ export function RegisterForm() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (password !== confirm) {
+      setError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (siteKey && !captcha) {
+      setError('Por favor confirma que no eres un robot.');
+      return;
+    }
+
     setLoading(true);
     try {
-      await register(homeserver, username.trim(), password, token || undefined);
+      await register({
+        homeserverUrl: homeserver,
+        username: username.trim(),
+        password,
+        captchaResponse: captcha ?? undefined,
+      });
       router.push('/chat');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'No se pudo crear la cuenta.';
       setError(
         msg.includes('M_FORBIDDEN')
-          ? 'El registro no está permitido en este homeserver o requiere un token.'
-          : msg,
+          ? 'El registro no está permitido en este homeserver.'
+          : msg.includes('M_USER_IN_USE')
+            ? 'Ese usuario ya está en uso. Elige otro.'
+            : msg,
       );
+      setCaptcha(null);
     } finally {
       setLoading(false);
     }
@@ -88,29 +112,62 @@ export function RegisterForm() {
             placeholder="usuario"
           />
         </label>
+
+        <div>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Contraseña
+            </span>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                minLength={8}
+                required
+                className="input pr-12"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                tabIndex={-1}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
+          </label>
+          <p className="mt-1 text-xs text-slate-400">Mínimo 8 caracteres.</p>
+        </div>
+
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Contraseña
+            Confirmar contraseña
           </span>
           <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            type={showPassword ? 'text' : 'password'}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
             minLength={8}
             required
-            className="input"
+            className={`input ${confirm && confirm !== password ? 'border-red-400 focus:border-red-400 focus:ring-red-300' : ''}`}
             autoComplete="new-password"
           />
+          {confirm && confirm !== password && (
+            <span className="mt-1 block text-xs text-red-600 dark:text-red-400">
+              Las contraseñas no coinciden.
+            </span>
+          )}
         </label>
-        <details className="text-xs text-slate-500 dark:text-slate-400">
-          <summary className="cursor-pointer select-none">Token de registro (si aplica)</summary>
-          <input
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            className="input mt-2"
-            placeholder="Token proporcionado por tu organización"
-          />
-        </details>
+
+        {siteKey && (
+          <div className="pt-1">
+            <Recaptcha siteKey={siteKey} onChange={setCaptcha} theme={theme === 'dark' ? 'dark' : 'light'} />
+          </div>
+        )}
 
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
@@ -118,7 +175,11 @@ export function RegisterForm() {
           </p>
         )}
 
-        <button type="submit" disabled={loading} className="btn-primary w-full">
+        <button
+          type="submit"
+          disabled={loading || (!!confirm && confirm !== password)}
+          className="btn-primary w-full"
+        >
           {loading ? 'Creando…' : 'Crear cuenta'}
         </button>
       </form>

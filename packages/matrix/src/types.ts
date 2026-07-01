@@ -20,6 +20,8 @@ export interface RegisterParams {
   password: string;
   /** Token de registro si el homeserver lo exige. */
   registrationToken?: string;
+  /** Respuesta del reCAPTCHA (g-recaptcha-response) si el homeserver lo exige. */
+  captchaResponse?: string;
 }
 
 export interface RoomSummary {

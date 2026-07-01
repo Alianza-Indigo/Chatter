@@ -35,16 +35,21 @@ database:
 log_config: "/data/log.config"
 media_store_path: /data/media_store
 
-# --- Registro controlado por token ---
-# El auto-registro vía web está habilitado, pero SIEMPRE requiere un token de
-# registro válido. Así los usuarios se dan de alta solos (sin crearlos uno por
-# uno con la API admin), pero un dominio público como whalabi.app queda
-# protegido contra spam de bots: sin token no se puede crear cuenta.
-# Los tokens se emiten con la Synapse Admin API (registration_tokens/new) y se
-# comparten con las personas autorizadas de la organización.
+# --- Registro abierto protegido con CAPTCHA ---
+# El auto-registro vía web está habilitado y es self-service (cualquiera crea su
+# cuenta sin que un admin la dé de alta). Para evitar spam de bots en un dominio
+# público como whalabi.app, el registro exige resolver un reCAPTCHA v2 de Google
+# ("no soy un robot"). No se pide email ni token.
+#
+# Requiere crear un par de llaves reCAPTCHA v2 en https://www.google.com/recaptcha/admin
+# y ponerlas en el .env como RECAPTCHA_PUBLIC_KEY / RECAPTCHA_PRIVATE_KEY.
+# La llave pública (site key) también va al build de la web como
+# NEXT_PUBLIC_RECAPTCHA_SITE_KEY para renderizar el widget.
 enable_registration: true
 enable_registration_without_verification: true
-registration_requires_token: true
+enable_registration_captcha: true
+recaptcha_public_key: "${RECAPTCHA_PUBLIC_KEY}"
+recaptcha_private_key: "${RECAPTCHA_PRIVATE_KEY}"
 registration_shared_secret: "${MATRIX_REGISTRATION_SHARED_SECRET}"
 
 # --- Federación ---

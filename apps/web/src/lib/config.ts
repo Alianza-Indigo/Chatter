@@ -9,4 +9,6 @@ export const config = {
   defaultServerName: process.env.NEXT_PUBLIC_MATRIX_SERVER_NAME ?? 'whalabi.local',
   defaultTenantSlug: process.env.NEXT_PUBLIC_DEFAULT_TENANT_SLUG ?? 'default',
   vapidPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '',
+  // Site key pública de reCAPTCHA v2 ("no soy un robot"). Vacío = sin CAPTCHA.
+  recaptchaSiteKey: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ?? '',
 };
