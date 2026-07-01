@@ -34,6 +34,28 @@ export class GeminiProvider implements LLMProvider {
   constructor(private readonly opts: { baseUrl: string; apiKey: string }) {}
 
   async generateResponse(input: LLMInput): Promise<LLMOutput> {
+    try {
+      return await this.call(input, true); // con búsqueda web (grounding)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // La cuota de grounding (free tier) es muy baja / requiere billing. Si da
+      // 429, degradamos con elegancia: respondemos SIN búsqueda web.
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+        const out = await this.call(input, false);
+        return {
+          ...out,
+          text:
+            out.text +
+            '\n\n_(Respondido sin búsqueda web: se alcanzó el límite de la cuota de ' +
+            'Google Search. Activa facturación en Google AI Studio para búsqueda en ' +
+            'tiempo real.)_',
+        };
+      }
+      throw err;
+    }
+  }
+
+  private async call(input: LLMInput, useGrounding: boolean): Promise<LLMOutput> {
     // Acepta tanto la base nativa como la OpenAI-compatible (le quita /openai).
     const base = (this.opts.baseUrl || DEFAULT_BASE)
       .replace(/\/openai\/?$/, '')
@@ -50,7 +72,7 @@ export class GeminiProvider implements LLMProvider {
     const body = {
       system_instruction: { parts: [{ text: input.systemPrompt }] },
       contents,
-      tools: [{ google_search: {} }],
+      ...(useGrounding ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         temperature: input.temperature ?? 0.4,
         maxOutputTokens: input.maxTokens ?? 1024,
