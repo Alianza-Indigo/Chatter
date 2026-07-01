@@ -163,14 +163,17 @@ export function CreateRoomModal({
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">
-            Invitar (Matrix IDs, separados por coma)
+            Invitar (usuarios separados por coma)
           </span>
           <input
             className="input"
             value={invite}
             onChange={(e) => setInvite(e.target.value)}
-            placeholder="@ana:whalabi.app, @luis:whalabi.app"
+            placeholder="ana, luis"
           />
+          <span className="mt-1 block text-xs text-slate-400">
+            Basta el usuario (p. ej. <b>ana</b>); el dominio se completa solo.
+          </span>
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button type="submit" disabled={busy} className="btn-primary w-full">
@@ -216,13 +219,16 @@ export function InviteModal({
     <Modal open={open} onClose={onClose} title="Invitar al room">
       <div className="space-y-4">
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Matrix ID</span>
+          <span className="mb-1 block text-sm font-medium text-slate-600 dark:text-slate-300">Usuario</span>
           <input
             className="input"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
-            placeholder={`@usuario:${tenant?.matrixServerName ?? 'whalabi.app'}`}
+            placeholder="cesar"
           />
+          <span className="mt-1 block text-xs text-slate-400">
+            Basta el usuario; el dominio (@…:{tenant?.matrixServerName ?? 'whalabi.app'}) se completa solo.
+          </span>
         </label>
         <div className="flex gap-2">
           <button type="button" disabled={busy} onClick={() => doInvite(userId)} className="btn-primary flex-1">

@@ -240,7 +240,7 @@ export class WhalabiMatrixClient {
     const res = await this.client.createRoom({
       name: opts.name,
       topic: opts.topic,
-      invite: opts.invite,
+      invite: opts.invite?.map((u) => this.normalizeUserId(u)),
       is_direct: opts.isDirect ?? false,
       preset: opts.isDirect ? Preset.TrustedPrivateChat : Preset.PrivateChat,
       visibility: Visibility.Private,
@@ -256,7 +256,19 @@ export class WhalabiMatrixClient {
 
   async invite(roomId: string, userId: string): Promise<void> {
     if (!this.client) throw new Error('Cliente no inicializado');
-    await this.client.invite(roomId, userId);
+    await this.client.invite(roomId, this.normalizeUserId(userId));
+  }
+
+  /**
+   * Acepta `cesar`, `@cesar` o `@cesar:whalabi.app` y devuelve siempre el MXID
+   * completo. El dominio por defecto es el del propio usuario de la sesión.
+   */
+  normalizeUserId(input: string): string {
+    const raw = input.trim();
+    if (raw.includes(':')) return raw.startsWith('@') ? raw : `@${raw}`;
+    const localpart = raw.replace(/^@/, '');
+    const myDomain = this.session?.userId.split(':')[1] ?? '';
+    return myDomain ? `@${localpart}:${myDomain}` : `@${localpart}`;
   }
 
   /** Busca personas en el directorio del homeserver (estilo "contactos"). */
