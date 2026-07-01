@@ -468,8 +468,24 @@ export class WhalabiMatrixClient {
     const room = this.client.getRoom(roomId);
     if (!room) return;
     const events = room.getLiveTimeline().getEvents();
-    const last = events[events.length - 1];
-    if (last) await this.client.sendReadReceipt(last);
+    // Buscar el último evento con ID REAL del servidor. Los "local echo"
+    // (mensajes aún sin confirmar) tienen ID que empieza con "~" y status
+    // pendiente: mandarles un recibo de lectura da 400 y rompe la apertura.
+    let target: MatrixEvent | undefined;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i];
+      const id = ev?.getId();
+      if (ev && id && id.startsWith('$') && !ev.status) {
+        target = ev;
+        break;
+      }
+    }
+    if (!target) return;
+    try {
+      await this.client.sendReadReceipt(target);
+    } catch {
+      /* un recibo de lectura fallido nunca debe romper la UI */
+    }
   }
 
   // -------------------------------------------------------------------------
