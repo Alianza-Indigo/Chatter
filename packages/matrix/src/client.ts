@@ -190,6 +190,13 @@ export class WhalabiMatrixClient {
       if (state === 'PREPARED' || state === 'SYNCING') this.emitRooms();
     });
 
+    // Un room recién creado/entrado (p. ej. al abrir un chat directo) o un cambio
+    // de membresía deben reflejarse de inmediato en la lista, sin esperar al
+    // siguiente ciclo de sync. Sin esto, al iniciar un chat el room no aparece a
+    // tiempo y la conversación no se abre.
+    client.on(ClientEvent.Room, () => this.emitRooms());
+    client.on(RoomEvent.MyMembership, () => this.emitRooms());
+
     client.on(RoomEvent.Timeline, (_ev: MatrixEvent, room?: Room) => {
       this.emitRooms();
       if (room) this.emitTimeline(room.roomId);
@@ -296,7 +303,12 @@ export class WhalabiMatrixClient {
     const existing = this.findDirectRoom(userId);
     if (existing) return existing;
     const roomId = await this.createRoom({ invite: [userId], isDirect: true });
-    await this.recordDirect(userId, roomId);
+    // Registrar el DM es "best effort": si falla, el chat ya está creado igual.
+    try {
+      await this.recordDirect(userId, roomId);
+    } catch {
+      /* no bloquear la apertura del chat */
+    }
     return roomId;
   }
 
