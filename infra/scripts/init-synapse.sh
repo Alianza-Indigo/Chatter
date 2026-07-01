@@ -49,14 +49,26 @@ echo "==> Aplicando config de Whalabi (homeserver.yaml + log.config)…"
 : "${RECAPTCHA_PRIVATE_KEY:=}"
 export MATRIX_DEFAULT_SERVER_NAME APP_PUBLIC_URL MATRIX_REGISTRATION_SHARED_SECRET
 export RECAPTCHA_PUBLIC_KEY RECAPTCHA_PRIVATE_KEY
-WRITE="tee"
-if [[ ! -w "$SYNAPSE_DIR" ]]; then WRITE="sudo tee"; fi
+
+# Escribe stdin al destino usando sudo solo si el archivo destino (o su carpeta,
+# si no existe) no es escribible por el usuario actual. Checar el ARCHIVO, no solo
+# la carpeta: un homeserver.yaml de un render previo puede ser de root aunque la
+# carpeta sea escribible.
+write_to() {
+  local target="$1"
+  if { [[ -e "$target" && -w "$target" ]] || { [[ ! -e "$target" ]] && [[ -w "$(dirname "$target")" ]]; }; }; then
+    tee "$target" > /dev/null
+  else
+    sudo tee "$target" > /dev/null
+  fi
+}
+
 envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET} ${RECAPTCHA_PUBLIC_KEY} ${RECAPTCHA_PRIVATE_KEY}' \
   < "$CONFIG_DIR/homeserver.yaml.template" \
-  | $WRITE "$SYNAPSE_DIR/homeserver.yaml" > /dev/null
+  | write_to "$SYNAPSE_DIR/homeserver.yaml"
 
 # Copiar log.config al volumen (homeserver.yaml lo referencia como /data/log.config).
-$WRITE "$SYNAPSE_DIR/log.config" < "$CONFIG_DIR/log.config" > /dev/null
+write_to "$SYNAPSE_DIR/log.config" < "$CONFIG_DIR/log.config"
 
 echo "==> Listo. Arranca Synapse con:"
 echo "    docker compose -f infra/docker-compose.yml up -d postgres-synapse synapse"
