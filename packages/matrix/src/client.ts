@@ -1,22 +1,26 @@
 /**
  * WhalabiMatrixClient — wrapper delgado sobre matrix-js-sdk.
  *
- * Toda la mensajería real (sync, envío, timelines) la maneja matrix-js-sdk.
- * Este wrapper expone una superficie pequeña y estable para el frontend,
- * sin reimplementar la Client-Server API ni inventar webhooks.
+ * Toda la mensajería real (sync, envío, timelines, reacciones, adjuntos) la
+ * maneja matrix-js-sdk. Este wrapper expone una superficie pequeña y estable
+ * para el frontend, sin reimplementar la Client-Server API.
  */
 import {
   createClient,
   ClientEvent,
   RoomEvent,
+  RoomMemberEvent,
   type MatrixClient,
   type MatrixEvent,
   type Room,
+  type RoomMember as SdkRoomMember,
   Direction,
   EventType,
+  EventStatus,
   MsgType,
   Preset,
   Visibility,
+  RelationType,
 } from 'matrix-js-sdk';
 import { serverNameFromUserId } from '@whalabi/shared';
 import type {
@@ -24,6 +28,8 @@ import type {
   RegisterParams,
   RoomSummary,
   TimelineMessage,
+  MessageReaction,
+  RoomMember,
   UserProfile,
   WhalabiSession,
 } from './types';
@@ -31,6 +37,7 @@ import type {
 export type RoomsUpdatedHandler = (rooms: RoomSummary[]) => void;
 export type TimelineUpdatedHandler = (roomId: string, messages: TimelineMessage[]) => void;
 export type SyncStateHandler = (state: string) => void;
+export type TypingHandler = (roomId: string, userIds: string[]) => void;
 
 export class WhalabiMatrixClient {
   private client: MatrixClient | null = null;
@@ -39,12 +46,12 @@ export class WhalabiMatrixClient {
   private roomsHandlers = new Set<RoomsUpdatedHandler>();
   private timelineHandlers = new Set<TimelineUpdatedHandler>();
   private syncHandlers = new Set<SyncStateHandler>();
+  private typingHandlers = new Set<TypingHandler>();
 
   // -------------------------------------------------------------------------
   // Autenticación
   // -------------------------------------------------------------------------
 
-  /** Login con usuario/contraseña Matrix. Devuelve la sesión persistible. */
   async login(params: LoginParams): Promise<WhalabiSession> {
     const tmp = createClient({ baseUrl: params.homeserverUrl });
     const identifierUser = params.user.startsWith('@')
@@ -67,11 +74,6 @@ export class WhalabiMatrixClient {
     return session;
   }
 
-  /**
-   * Registro Matrix. Puede requerir varios pasos UIA; se maneja el flujo
-   * `m.login.dummy` y el de token de registro. Errores claros si el
-   * homeserver no permite registro abierto.
-   */
   async register(params: RegisterParams): Promise<WhalabiSession> {
     const tmp = createClient({ baseUrl: params.homeserverUrl });
 
@@ -84,20 +86,14 @@ export class WhalabiMatrixClient {
       });
 
     try {
-      // Primera llamada: normalmente devuelve 401 con los flows disponibles.
       const res = await doRegister();
       return this.sessionFromRegister(res, params.homeserverUrl);
     } catch (err: unknown) {
-      const e = err as { httpStatus?: number; data?: { session?: string; flows?: unknown } };
+      const e = err as { httpStatus?: number; data?: { session?: string } };
       if (e.httpStatus === 401 && e.data?.session) {
         const session = e.data.session;
-        // Intentar token de registro si se proporcionó, si no dummy.
         const auth = params.registrationToken
-          ? {
-              type: 'm.login.registration_token',
-              token: params.registrationToken,
-              session,
-            }
+          ? { type: 'm.login.registration_token', token: params.registrationToken, session }
           : { type: 'm.login.dummy', session };
         const res = await doRegister(auth);
         return this.sessionFromRegister(res, params.homeserverUrl);
@@ -120,7 +116,6 @@ export class WhalabiMatrixClient {
     return session;
   }
 
-  /** Restaura una sesión previamente persistida y crea el cliente real. */
   restore(session: WhalabiSession): void {
     this.session = session;
     this.client = createClient({
@@ -131,14 +126,13 @@ export class WhalabiMatrixClient {
     });
   }
 
-  /** Cierra sesión, detiene el sync e invalida el token en el servidor. */
   async logout(): Promise<void> {
     if (this.client) {
       this.stopSync();
       try {
         await this.client.logout(true);
       } catch {
-        // ignorar errores de red en logout
+        /* ignore */
       }
       this.client = null;
     }
@@ -148,7 +142,6 @@ export class WhalabiMatrixClient {
   getSession(): WhalabiSession | null {
     return this.session;
   }
-
   getUserId(): string | null {
     return this.session?.userId ?? null;
   }
@@ -157,21 +150,33 @@ export class WhalabiMatrixClient {
   // Sync
   // -------------------------------------------------------------------------
 
-  /** Arranca el sync de Matrix. Debe llamarse tras `restore()`. */
   async startSync(): Promise<void> {
     if (!this.client) throw new Error('Cliente no inicializado: llama a restore() primero');
     const client = this.client;
 
     client.on(ClientEvent.Sync, (state: string) => {
       this.syncHandlers.forEach((h) => h(state));
-      if (state === 'PREPARED' || state === 'SYNCING') {
-        this.emitRooms();
-      }
+      if (state === 'PREPARED' || state === 'SYNCING') this.emitRooms();
     });
 
     client.on(RoomEvent.Timeline, (_ev: MatrixEvent, room?: Room) => {
       this.emitRooms();
       if (room) this.emitTimeline(room.roomId);
+    });
+    client.on(RoomEvent.Redaction, (_ev: MatrixEvent, room?: Room) => {
+      if (room) this.emitTimeline(room.roomId);
+    });
+    client.on(RoomEvent.LocalEchoUpdated, (_ev: MatrixEvent, room: Room) => {
+      this.emitTimeline(room.roomId);
+    });
+    client.on(RoomMemberEvent.Typing, (_ev: MatrixEvent, member: SdkRoomMember) => {
+      const room = client.getRoom(member.roomId);
+      if (!room) return;
+      const typing = room
+        .getMembers()
+        .filter((m) => m.typing && m.userId !== this.session?.userId)
+        .map((m) => m.name || m.userId);
+      this.typingHandlers.forEach((h) => h(member.roomId, typing));
     });
 
     await client.startClient({ initialSyncLimit: 30 });
@@ -187,14 +192,13 @@ export class WhalabiMatrixClient {
 
   getRooms(): RoomSummary[] {
     if (!this.client) return [];
-    const rooms = this.client.getRooms();
-    return rooms
+    return this.client
+      .getRooms()
       .filter((r) => r.getMyMembership() === 'join')
       .map((r) => this.toRoomSummary(r))
       .sort((a, b) => (b.lastTs ?? 0) - (a.lastTs ?? 0));
   }
 
-  /** Crea un room. Si `invite` incluye MXIDs, los invita. `isDirect` para DMs. */
   async createRoom(opts: {
     name?: string;
     invite?: string[];
@@ -213,55 +217,147 @@ export class WhalabiMatrixClient {
     return res.room_id;
   }
 
-  /** Une al usuario a un room por ID o alias. */
   async joinRoom(roomIdOrAlias: string): Promise<string> {
     if (!this.client) throw new Error('Cliente no inicializado');
     const room = await this.client.joinRoom(roomIdOrAlias);
     return room.roomId;
   }
 
-  /** Invita a un usuario a un room (útil para invitar al bot). */
   async invite(roomId: string, userId: string): Promise<void> {
     if (!this.client) throw new Error('Cliente no inicializado');
     await this.client.invite(roomId, userId);
+  }
+
+  /** Miembros del room (unidos e invitados). */
+  getMembers(roomId: string): RoomMember[] {
+    if (!this.client) return [];
+    const room = this.client.getRoom(roomId);
+    if (!room) return [];
+    const myId = this.session?.userId ?? '';
+    return room
+      .getMembers()
+      .filter((m) => m.membership === 'join' || m.membership === 'invite')
+      .map((m) => ({
+        userId: m.userId,
+        displayName: m.name || null,
+        avatarUrl: m.getMxcAvatarUrl()
+          ? this.client!.mxcUrlToHttp(m.getMxcAvatarUrl()!, 48, 48, 'crop') ?? null
+          : null,
+        membership: m.membership ?? 'leave',
+        isSelf: m.userId === myId,
+      }));
+  }
+
+  async setRoomName(roomId: string, name: string): Promise<void> {
+    if (!this.client) throw new Error('Cliente no inicializado');
+    await this.client.setRoomName(roomId, name);
   }
 
   // -------------------------------------------------------------------------
   // Mensajes
   // -------------------------------------------------------------------------
 
-  /** Envía un mensaje de texto al room. */
-  async sendMessage(roomId: string, body: string): Promise<string> {
+  async sendMessage(roomId: string, body: string, replyToEventId?: string): Promise<string> {
     if (!this.client) throw new Error('Cliente no inicializado');
-    const res = await this.client.sendEvent(roomId, EventType.RoomMessage, {
-      msgtype: MsgType.Text,
-      body,
-    });
+    const content: Record<string, unknown> = { msgtype: MsgType.Text, body };
+    if (replyToEventId) {
+      content['m.relates_to'] = { 'm.in_reply_to': { event_id: replyToEventId } };
+    }
+    const res = await this.client.sendEvent(roomId, EventType.RoomMessage, content as never);
     return res.event_id;
   }
 
-  /** Devuelve el timeline (mensajes) actual de un room. */
+  /** Sube un archivo y lo envía como imagen o archivo genérico. */
+  async sendAttachment(roomId: string, file: File): Promise<string> {
+    if (!this.client) throw new Error('Cliente no inicializado');
+    const upload = await this.client.uploadContent(file, { name: file.name, type: file.type });
+    const isImage = file.type.startsWith('image/');
+    const content = {
+      msgtype: isImage ? MsgType.Image : MsgType.File,
+      body: file.name,
+      url: upload.content_uri,
+      info: { mimetype: file.type, size: file.size },
+    };
+    const res = await this.client.sendEvent(roomId, EventType.RoomMessage, content as never);
+    return res.event_id;
+  }
+
+  /** Reacciona (o quita la reacción si ya existe) con un emoji. */
+  async toggleReaction(roomId: string, eventId: string, key: string): Promise<void> {
+    if (!this.client) throw new Error('Cliente no inicializado');
+    const room = this.client.getRoom(roomId);
+    const myId = this.session?.userId ?? '';
+    // ¿ya reaccioné con este emoji? -> redactar
+    const existing = room
+      ?.getLiveTimeline()
+      .getEvents()
+      .find(
+        (e) =>
+          e.getType() === EventType.Reaction &&
+          e.getSender() === myId &&
+          e.getRelation()?.event_id === eventId &&
+          e.getRelation()?.key === key,
+      );
+    if (existing) {
+      const id = existing.getId();
+      if (id) await this.client.redactEvent(roomId, id);
+      return;
+    }
+    await this.client.sendEvent(roomId, EventType.Reaction, {
+      'm.relates_to': { rel_type: RelationType.Annotation, event_id: eventId, key },
+    } as never);
+  }
+
+  async sendTyping(roomId: string, isTyping: boolean): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.sendTyping(roomId, isTyping, isTyping ? 4000 : 0);
+    } catch {
+      /* ignore */
+    }
+  }
+
   getTimeline(roomId: string): TimelineMessage[] {
     if (!this.client) return [];
     const room = this.client.getRoom(roomId);
     if (!room) return [];
     const myId = this.session?.userId ?? '';
     const events = room.getLiveTimeline().getEvents();
+
+    // Agregación de reacciones + índice de cuerpos (para previews de respuesta).
+    const reactions = new Map<string, Map<string, { count: number; mine: boolean }>>();
+    const bodyById = new Map<string, string>();
+    for (const ev of events) {
+      if (ev.getType() === EventType.RoomMessage) {
+        bodyById.set(ev.getId() ?? '', (ev.getContent().body as string) ?? '');
+      } else if (ev.getType() === EventType.Reaction && !ev.isRedacted()) {
+        const rel = ev.getRelation();
+        if (!rel?.event_id || !rel.key) continue;
+        const perEvent = reactions.get(rel.event_id) ?? new Map();
+        const cur = perEvent.get(rel.key) ?? { count: 0, mine: false };
+        cur.count += 1;
+        if (ev.getSender() === myId) cur.mine = true;
+        perEvent.set(rel.key, cur);
+        reactions.set(rel.event_id, perEvent);
+      }
+    }
+
     return events
       .filter((ev) => ev.getType() === EventType.RoomMessage && !ev.isRedacted())
-      .map((ev) => this.toTimelineMessage(ev, room, myId));
+      .map((ev) => this.toTimelineMessage(ev, room, myId, reactions, bodyById));
   }
 
-  /** Carga más historia hacia atrás en el timeline de un room. */
-  async loadOlderMessages(roomId: string, limit = 30): Promise<void> {
-    if (!this.client) return;
+  async loadOlderMessages(roomId: string, limit = 30): Promise<boolean> {
+    if (!this.client) return false;
     const room = this.client.getRoom(roomId);
-    if (!room) return;
+    if (!room) return false;
+    const before = room.getLiveTimeline().getEvents().length;
     await this.client.scrollback(room, limit);
+    const after = room.getLiveTimeline().getEvents().length;
     this.emitTimeline(roomId);
+    return after > before; // hubo más historia
   }
 
-  /** Marca el último mensaje del room como leído. */
   async markRead(roomId: string): Promise<void> {
     if (!this.client) return;
     const room = this.client.getRoom(roomId);
@@ -295,22 +391,47 @@ export class WhalabiMatrixClient {
   }
 
   // -------------------------------------------------------------------------
-  // Suscripciones (para React)
+  // Búsqueda
+  // -------------------------------------------------------------------------
+
+  /** Busca texto en los mensajes del usuario (todos sus rooms). */
+  async searchMessages(term: string): Promise<Array<{ roomId: string; body: string; sender: string; ts: number }>> {
+    if (!this.client || !term.trim()) return [];
+    const res = await this.client.searchMessageText({ query: term });
+    const results = res.search_categories?.room_events?.results ?? [];
+    return results
+      .map((r) => {
+        const ev = r.result;
+        if (!ev) return null;
+        return {
+          roomId: ev.room_id ?? '',
+          body: (ev.content?.body as string) ?? '',
+          sender: ev.sender ?? '',
+          ts: ev.origin_server_ts ?? 0,
+        };
+      })
+      .filter((x): x is { roomId: string; body: string; sender: string; ts: number } => Boolean(x));
+  }
+
+  // -------------------------------------------------------------------------
+  // Suscripciones
   // -------------------------------------------------------------------------
 
   onRoomsUpdated(h: RoomsUpdatedHandler): () => void {
     this.roomsHandlers.add(h);
     return () => this.roomsHandlers.delete(h);
   }
-
   onTimelineUpdated(h: TimelineUpdatedHandler): () => void {
     this.timelineHandlers.add(h);
     return () => this.timelineHandlers.delete(h);
   }
-
   onSyncState(h: SyncStateHandler): () => void {
     this.syncHandlers.add(h);
     return () => this.syncHandlers.delete(h);
+  }
+  onTyping(h: TypingHandler): () => void {
+    this.typingHandlers.add(h);
+    return () => this.typingHandlers.delete(h);
   }
 
   // -------------------------------------------------------------------------
@@ -321,7 +442,6 @@ export class WhalabiMatrixClient {
     const rooms = this.getRooms();
     this.roomsHandlers.forEach((h) => h(rooms));
   }
-
   private emitTimeline(roomId: string): void {
     const msgs = this.getTimeline(roomId);
     this.timelineHandlers.forEach((h) => h(roomId, msgs));
@@ -347,9 +467,7 @@ export class WhalabiMatrixClient {
       lastTs,
       unreadCount: room.getUnreadNotificationCount() ?? 0,
       isDirect: Boolean(room.getDMInviter()) || this.isDirectRoom(room.roomId),
-      avatarUrl: avatarMxc
-        ? this.client?.mxcUrlToHttp(avatarMxc, 64, 64, 'crop') ?? null
-        : null,
+      avatarUrl: avatarMxc ? this.client?.mxcUrlToHttp(avatarMxc, 64, 64, 'crop') ?? null : null,
     };
   }
 
@@ -361,17 +479,60 @@ export class WhalabiMatrixClient {
     return Object.values(content).some((ids) => ids.includes(roomId));
   }
 
-  private toTimelineMessage(ev: MatrixEvent, room: Room, myId: string): TimelineMessage {
+  private toTimelineMessage(
+    ev: MatrixEvent,
+    room: Room,
+    myId: string,
+    reactions: Map<string, Map<string, { count: number; mine: boolean }>>,
+    bodyById: Map<string, string>,
+  ): TimelineMessage {
     const sender = ev.getSender() ?? '';
     const member = room.getMember(sender);
+    const content = ev.getContent();
+    const eventId = ev.getId() ?? '';
+
+    const status: TimelineMessage['status'] =
+      ev.status === EventStatus.NOT_SENT
+        ? 'failed'
+        : ev.status === EventStatus.SENDING || ev.status === EventStatus.QUEUED
+          ? 'sending'
+          : 'sent';
+
+    const reactMap = reactions.get(eventId);
+    const reactionList: MessageReaction[] = reactMap
+      ? Array.from(reactMap.entries()).map(([key, v]) => ({ key, count: v.count, mine: v.mine }))
+      : [];
+
+    const relatesTo = content['m.relates_to'] as
+      | { 'm.in_reply_to'?: { event_id?: string } }
+      | undefined;
+    const replyToEventId = relatesTo?.['m.in_reply_to']?.event_id ?? null;
+
+    const msgtype = (content.msgtype as string) ?? MsgType.Text;
+    let mediaUrl: string | null = null;
+    let fileName: string | null = null;
+    if ((msgtype === MsgType.Image || msgtype === MsgType.File) && typeof content.url === 'string') {
+      mediaUrl = this.client?.mxcUrlToHttp(content.url) ?? null;
+      fileName = (content.body as string) ?? null;
+    }
+
     return {
-      eventId: ev.getId() ?? '',
+      eventId,
       sender,
       senderDisplayName: member?.name ?? serverNameFromUserId(sender) ?? sender,
-      body: (ev.getContent().body as string) ?? '',
+      senderAvatarUrl: member?.getMxcAvatarUrl()
+        ? this.client?.mxcUrlToHttp(member.getMxcAvatarUrl()!, 40, 40, 'crop') ?? null
+        : null,
+      body: (content.body as string) ?? '',
       ts: ev.getTs(),
       isOwn: sender === myId,
-      msgtype: (ev.getContent().msgtype as string) ?? MsgType.Text,
+      msgtype,
+      status,
+      reactions: reactionList,
+      replyToEventId,
+      replyToPreview: replyToEventId ? bodyById.get(replyToEventId) ?? null : null,
+      mediaUrl,
+      fileName,
     };
   }
 }

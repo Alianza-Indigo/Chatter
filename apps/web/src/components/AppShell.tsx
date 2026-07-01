@@ -3,70 +3,111 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TimelineMessage } from '@whalabi/matrix';
 import { useMatrix } from '@/lib/matrix-provider';
-import { useTenant } from '@/lib/tenant-provider';
 import { Sidebar } from './Sidebar';
 import { ChatHeader } from './ChatHeader';
 import { MessageList } from './MessageList';
 import { MessageComposer } from './MessageComposer';
 import { EmptyState } from './states';
+import { Modal } from './Modal';
+import { InviteModal, MembersModal } from './RoomModals';
 
-/** Layout principal del chat: sidebar de rooms + conversación activa. */
 export function AppShell() {
-  const { rooms, sendMessage, subscribeTimeline, markRead, invite } = useMatrix();
-  const { tenant } = useTenant();
+  const {
+    rooms,
+    sendMessage,
+    sendAttachment,
+    toggleReaction,
+    sendTyping,
+    subscribeTimeline,
+    subscribeTyping,
+    markRead,
+    loadOlder,
+    setRoomName,
+  } = useMatrix();
+
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<TimelineMessage[]>([]);
+  const [replyTo, setReplyTo] = useState<TimelineMessage | null>(null);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState('');
 
   const activeRoom = useMemo(
     () => rooms.find((r) => r.roomId === activeRoomId) ?? null,
     [rooms, activeRoomId],
   );
 
-  // Suscribirse al timeline del room activo.
   useEffect(() => {
     if (!activeRoomId) {
       setMessages([]);
+      setTypingUsers([]);
       return;
     }
-    const unsub = subscribeTimeline(activeRoomId, setMessages);
+    setReplyTo(null);
+    const unsubTimeline = subscribeTimeline(activeRoomId, setMessages);
+    const unsubTyping = subscribeTyping(activeRoomId, setTypingUsers);
     void markRead(activeRoomId);
-    return unsub;
-  }, [activeRoomId, subscribeTimeline, markRead]);
+    return () => {
+      unsubTimeline();
+      unsubTyping();
+    };
+  }, [activeRoomId, subscribeTimeline, subscribeTyping, markRead]);
 
-  async function onInviteBot() {
-    if (!activeRoomId || !tenant?.botUserId) return;
-    try {
-      await invite(activeRoomId, tenant.botUserId);
-      window.alert(
-        'Bot invitado. El asistente podrá leer los mensajes de este room mientras esté presente.',
-      );
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'No se pudo invitar al bot.');
-    }
+  async function handleSend(body: string) {
+    if (!activeRoomId) return;
+    await sendMessage(activeRoomId, body, replyTo?.eventId);
+    setReplyTo(null);
+  }
+
+  async function handleRename(e: React.FormEvent) {
+    e.preventDefault();
+    if (!activeRoomId || !newName.trim()) return;
+    await setRoomName(activeRoomId, newName.trim());
+    setRenaming(false);
+    setNewName('');
   }
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-slate-100 dark:bg-slate-950">
-      {/* Sidebar: oculto en móvil cuando hay room activo */}
       <div className={`${activeRoomId ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96`}>
         <Sidebar rooms={rooms} activeRoomId={activeRoomId} onSelect={setActiveRoomId} />
       </div>
 
-      {/* Conversación */}
-      <main
-        className={`${activeRoomId ? 'flex' : 'hidden md:flex'} h-full min-w-0 flex-1 flex-col`}
-      >
+      <main className={`${activeRoomId ? 'flex' : 'hidden md:flex'} h-full min-w-0 flex-1 flex-col`}>
         {activeRoom ? (
           <>
             <ChatHeader
               room={activeRoom}
-              onInviteBot={onInviteBot}
+              onInvite={() => setShowInvite(true)}
+              onMembers={() => setShowMembers(true)}
+              onRename={() => {
+                setNewName(activeRoom.name);
+                setRenaming(true);
+              }}
               onBack={() => setActiveRoomId(null)}
             />
-            <div className="flex-1 overflow-y-auto bg-slate-100 dark:bg-slate-950">
-              <MessageList messages={messages} />
+            <div className="min-h-0 flex-1 bg-slate-100 dark:bg-slate-950">
+              <MessageList
+                messages={messages}
+                onReply={setReplyTo}
+                onReact={(eventId, emoji) => void toggleReaction(activeRoom.roomId, eventId, emoji)}
+                onLoadOlder={() => loadOlder(activeRoom.roomId)}
+              />
             </div>
-            <MessageComposer onSend={(body) => sendMessage(activeRoom.roomId, body)} />
+            {typingUsers.length > 0 && (
+              <div className="px-4 py-1 text-xs italic text-slate-400">
+                {typingUsers.join(', ')} {typingUsers.length === 1 ? 'está' : 'están'} escribiendo…
+              </div>
+            )}
+            <MessageComposer
+              onSend={handleSend}
+              onSendFile={(file) => sendAttachment(activeRoom.roomId, file)}
+              onTyping={(t) => void sendTyping(activeRoom.roomId, t)}
+              replyTo={replyTo}
+              onCancelReply={() => setReplyTo(null)}
+            />
           </>
         ) : (
           <EmptyState
@@ -75,6 +116,21 @@ export function AppShell() {
           />
         )}
       </main>
+
+      {activeRoom && (
+        <>
+          <InviteModal open={showInvite} onClose={() => setShowInvite(false)} roomId={activeRoom.roomId} />
+          <MembersModal open={showMembers} onClose={() => setShowMembers(false)} roomId={activeRoom.roomId} />
+          <Modal open={renaming} onClose={() => setRenaming(false)} title="Renombrar room">
+            <form onSubmit={handleRename} className="space-y-4">
+              <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+              <button type="submit" className="btn-primary w-full">
+                Guardar
+              </button>
+            </form>
+          </Modal>
+        </>
+      )}
     </div>
   );
 }

@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { RoomSummary } from '@whalabi/matrix';
-import { useMatrix } from '@/lib/matrix-provider';
 import { useTheme } from '@/lib/theme-provider';
 import { TenantBrand } from './TenantBrand';
 import { RoomList } from './RoomList';
 import { UserProfile } from './UserProfile';
 import { InstallPWAButton } from './InstallPWAButton';
+import { CreateRoomModal } from './RoomModals';
 
 export function Sidebar({
   rooms,
@@ -20,30 +20,19 @@ export function Sidebar({
   onSelect: (roomId: string) => void;
   className?: string;
 }) {
-  const { createRoom } = useMatrix();
   const { theme, toggle } = useTheme();
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState('');
 
-  async function onCreate() {
-    const name = window.prompt('Nombre del nuevo room:');
-    if (!name) return;
-    const inviteRaw = window.prompt(
-      'Invitar (Matrix IDs separados por coma, opcional):',
-      '',
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rooms;
+    return rooms.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        (r.lastMessage ?? '').toLowerCase().includes(q),
     );
-    const invite = inviteRaw
-      ? inviteRaw.split(',').map((s) => s.trim()).filter(Boolean)
-      : undefined;
-    setCreating(true);
-    try {
-      const roomId = await createRoom({ name, invite });
-      onSelect(roomId);
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'No se pudo crear el room.');
-    } finally {
-      setCreating(false);
-    }
-  }
+  }, [rooms, query]);
 
   return (
     <aside
@@ -65,24 +54,31 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="px-3 py-2">
-        <button
-          type="button"
-          onClick={() => void onCreate()}
-          disabled={creating}
-          className="btn-primary w-full text-sm"
-        >
-          {creating ? 'Creando…' : '+ Nuevo room'}
+      <div className="space-y-2 px-3 py-2">
+        <button type="button" onClick={() => setCreating(true)} className="btn-primary w-full text-sm">
+          + Nuevo room
         </button>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar rooms…"
+          className="input py-1.5 text-sm"
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <RoomList rooms={rooms} activeRoomId={activeRoomId} onSelect={onSelect} />
+        <RoomList rooms={filtered} activeRoomId={activeRoomId} onSelect={onSelect} />
       </div>
 
       <div className="border-t border-slate-200 p-2 dark:border-slate-800">
         <UserProfile />
       </div>
+
+      <CreateRoomModal
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={(roomId) => onSelect(roomId)}
+      />
     </aside>
   );
 }

@@ -11,7 +11,12 @@ import {
   type ReactNode,
 } from 'react';
 import { WhalabiMatrixClient } from '@whalabi/matrix';
-import type { RoomSummary, TimelineMessage, WhalabiSession } from '@whalabi/matrix';
+import type {
+  RoomSummary,
+  TimelineMessage,
+  RoomMember,
+  WhalabiSession,
+} from '@whalabi/matrix';
 import { clearSession, loadSession, saveSession } from './session';
 
 interface MatrixContextValue {
@@ -27,20 +32,22 @@ interface MatrixContextValue {
     registrationToken?: string,
   ) => Promise<void>;
   logout: () => Promise<void>;
-  sendMessage: (roomId: string, body: string) => Promise<void>;
-  createRoom: (opts: {
-    name?: string;
-    invite?: string[];
-    isDirect?: boolean;
-  }) => Promise<string>;
+  sendMessage: (roomId: string, body: string, replyTo?: string) => Promise<void>;
+  sendAttachment: (roomId: string, file: File) => Promise<void>;
+  toggleReaction: (roomId: string, eventId: string, key: string) => Promise<void>;
+  sendTyping: (roomId: string, isTyping: boolean) => Promise<void>;
+  createRoom: (opts: { name?: string; invite?: string[]; isDirect?: boolean }) => Promise<string>;
   invite: (roomId: string, userId: string) => Promise<void>;
+  setRoomName: (roomId: string, name: string) => Promise<void>;
+  getMembers: (roomId: string) => RoomMember[];
   getTimeline: (roomId: string) => TimelineMessage[];
-  loadOlder: (roomId: string) => Promise<void>;
+  loadOlder: (roomId: string) => Promise<boolean>;
   markRead: (roomId: string) => Promise<void>;
-  subscribeTimeline: (
-    roomId: string,
-    cb: (messages: TimelineMessage[]) => void,
-  ) => () => void;
+  searchMessages: (
+    term: string,
+  ) => Promise<Array<{ roomId: string; body: string; sender: string; ts: number }>>;
+  subscribeTimeline: (roomId: string, cb: (messages: TimelineMessage[]) => void) => () => void;
+  subscribeTyping: (roomId: string, cb: (userIds: string[]) => void) => () => void;
 }
 
 const MatrixContext = createContext<MatrixContextValue | null>(null);
@@ -55,7 +62,6 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<WhalabiSession | null>(null);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
 
-  // Restaurar sesión persistida al montar.
   useEffect(() => {
     const saved = loadSession();
     if (!saved) {
@@ -67,9 +73,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       try {
         client.restore(saved);
         await client.startSync();
-        if (!cancelled) {
-          setSession(saved);
-        }
+        if (!cancelled) setSession(saved);
       } catch {
         clearSession();
       } finally {
@@ -81,7 +85,6 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     };
   }, [client]);
 
-  // Suscripciones a actualizaciones de rooms y sync.
   useEffect(() => {
     const offRooms = client.onRoomsUpdated(setRooms);
     const offSync = client.onSyncState(setSyncState);
@@ -103,12 +106,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (
-      homeserverUrl: string,
-      username: string,
-      password: string,
-      registrationToken?: string,
-    ) => {
+    async (homeserverUrl: string, username: string, password: string, registrationToken?: string) => {
       const s = await client.register({ homeserverUrl, username, password, registrationToken });
       saveSession(s);
       client.restore(s);
@@ -126,39 +124,6 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
     setSyncState('STOPPED');
   }, [client]);
 
-  const sendMessage = useCallback(
-    async (roomId: string, body: string) => {
-      await client.sendMessage(roomId, body);
-    },
-    [client],
-  );
-
-  const createRoom = useCallback(
-    (opts: { name?: string; invite?: string[]; isDirect?: boolean }) =>
-      client.createRoom(opts),
-    [client],
-  );
-
-  const invite = useCallback(
-    (roomId: string, userId: string) => client.invite(roomId, userId),
-    [client],
-  );
-
-  const getTimeline = useCallback((roomId: string) => client.getTimeline(roomId), [client]);
-  const loadOlder = useCallback((roomId: string) => client.loadOlderMessages(roomId), [client]);
-  const markRead = useCallback((roomId: string) => client.markRead(roomId), [client]);
-
-  const subscribeTimeline = useCallback(
-    (roomId: string, cb: (messages: TimelineMessage[]) => void) => {
-      // Emitir estado inicial.
-      cb(client.getTimeline(roomId));
-      return client.onTimelineUpdated((rid, msgs) => {
-        if (rid === roomId) cb(msgs);
-      });
-    },
-    [client],
-  );
-
   const value = useMemo<MatrixContextValue>(
     () => ({
       ready,
@@ -168,30 +133,30 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
-      sendMessage,
-      createRoom,
-      invite,
-      getTimeline,
-      loadOlder,
-      markRead,
-      subscribeTimeline,
+      sendMessage: (roomId, body, replyTo) => client.sendMessage(roomId, body, replyTo).then(() => undefined),
+      sendAttachment: (roomId, file) => client.sendAttachment(roomId, file).then(() => undefined),
+      toggleReaction: (roomId, eventId, key) => client.toggleReaction(roomId, eventId, key),
+      sendTyping: (roomId, isTyping) => client.sendTyping(roomId, isTyping),
+      createRoom: (opts) => client.createRoom(opts),
+      invite: (roomId, userId) => client.invite(roomId, userId),
+      setRoomName: (roomId, name) => client.setRoomName(roomId, name),
+      getMembers: (roomId) => client.getMembers(roomId),
+      getTimeline: (roomId) => client.getTimeline(roomId),
+      loadOlder: (roomId) => client.loadOlderMessages(roomId),
+      markRead: (roomId) => client.markRead(roomId),
+      searchMessages: (term) => client.searchMessages(term),
+      subscribeTimeline: (roomId, cb) => {
+        cb(client.getTimeline(roomId));
+        return client.onTimelineUpdated((rid, msgs) => {
+          if (rid === roomId) cb(msgs);
+        });
+      },
+      subscribeTyping: (roomId, cb) =>
+        client.onTyping((rid, userIds) => {
+          if (rid === roomId) cb(userIds);
+        }),
     }),
-    [
-      ready,
-      syncState,
-      session,
-      rooms,
-      login,
-      register,
-      logout,
-      sendMessage,
-      createRoom,
-      invite,
-      getTimeline,
-      loadOlder,
-      markRead,
-      subscribeTimeline,
-    ],
+    [ready, syncState, session, rooms, login, register, logout, client],
   );
 
   return <MatrixContext.Provider value={value}>{children}</MatrixContext.Provider>;
