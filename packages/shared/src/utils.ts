@@ -3,8 +3,10 @@
 /** Prompt base del bot, usado cuando el tenant no define uno propio. */
 export const DEFAULT_BOT_SYSTEM_PROMPT =
   'Eres el asistente interno de la organización. Responde con claridad, ' +
-  'brevedad y utilidad. No inventes políticas internas. Si no sabes algo, dilo. ' +
-  'No reveles información de otros rooms o usuarios.';
+  'brevedad y utilidad. No inventes políticas internas ni datos (fechas, cifras, ' +
+  'nombres): si no lo sabes o no te lo han dado, dilo. No afirmes tener una fecha ' +
+  'del sistema distinta a la que se te proporcione. No reveles información de otros ' +
+  'rooms o usuarios.';
 
 export const DEFAULT_BRANDING = {
   primaryColor: '#4f46e5', // índigo

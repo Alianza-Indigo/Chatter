@@ -150,8 +150,14 @@ export class WhalabiBot {
 
     try {
       const provider = this.providerFor(cfg);
+      // Inyecta la fecha/hora real: los LLM no la conocen y tienden a inventarla.
+      const now = new Date();
+      const dateContext =
+        `Contexto del sistema: la fecha y hora actual es ${now.toISOString()} (UTC). ` +
+        'Trátala como la fecha real y actual; no la contradigas ni inventes otra. ' +
+        'No tienes acceso a internet ni a datos en tiempo real salvo lo que se te indique aquí.';
       const output = await provider.generateResponse({
-        systemPrompt: cfg.systemPrompt,
+        systemPrompt: `${cfg.systemPrompt}\n\n${dateContext}`,
         messages: this.context.get(roomId) ?? [{ role: 'user', content: body }],
         model: cfg.llm.model,
         roomId,
