@@ -37,7 +37,9 @@ async function main(): Promise<void> {
       slug: 'clinica-demo',
       publicDomain: 'chat.clinica-demo.mx',
       matrixBaseUrl: homeserver,
-      matrixServerName: serverName,
+      // server_name propio (no compartir con el tenant default para que el bot
+      // pueda distinguir el tenant por el homeserver del room).
+      matrixServerName: 'clinica-demo.mx',
       botEnabled: true,
       botUserId: `@whalabi-bot:${serverName}`,
       botResponseMode: 'mention',
@@ -61,7 +63,7 @@ async function main(): Promise<void> {
       slug: 'despacho-demo',
       publicDomain: 'chat.despacho-demo.com',
       matrixBaseUrl: homeserver,
-      matrixServerName: serverName,
+      matrixServerName: 'despacho-demo.com',
       botEnabled: false,
       botResponseMode: 'mention',
       llmProvider: 'dummy',

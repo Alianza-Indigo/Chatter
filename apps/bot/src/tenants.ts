@@ -54,8 +54,13 @@ export async function resolveTenantForRoom(roomId: string): Promise<ResolvedTena
   if (prisma) {
     try {
       const serverName = serverNameFromUserId(roomId); // parte tras ':' del roomId
+      // orderBy determinista: si varios tenants comparten server_name (modo A),
+      // siempre se elige el más antiguo en vez de uno arbitrario.
       const byServer = serverName
-        ? await prisma.tenant.findFirst({ where: { matrixServerName: serverName } })
+        ? await prisma.tenant.findFirst({
+            where: { matrixServerName: serverName },
+            orderBy: { createdAt: 'asc' },
+          })
         : null;
       const tenant =
         byServer ??
