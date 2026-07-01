@@ -168,16 +168,30 @@ export function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const prevLen = useRef(0);
+  const initialized = useRef(false);
 
-  // Autoscroll al fondo cuando llegan mensajes (si estabas cerca del fondo).
+  // 1) Al abrir la conversación se salta al fondo (último mensaje) de inmediato.
+  // 2) Al llegar un mensaje nuevo, baja al fondo si estabas cerca del fondo o si
+  //    el mensaje es tuyo. Usamos scrollTop (instantáneo y fiable en móvil); el
+  //    scrollIntoView "smooth" anterior no completaba en móvil y la conversación
+  //    se quedaba a media altura sin bajar a los mensajes nuevos.
   useEffect(() => {
     const c = containerRef.current;
     if (!c) return;
-    const nearBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 200;
+    if (!initialized.current) {
+      if (messages.length === 0) return;
+      initialized.current = true;
+      prevLen.current = messages.length;
+      c.scrollTop = c.scrollHeight;
+      return;
+    }
     const grew = messages.length > prevLen.current;
     prevLen.current = messages.length;
-    if (nearBottom && grew) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    if (!grew) return;
+    const nearBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 200;
+    const last = messages[messages.length - 1];
+    if (nearBottom || last?.isOwn) c.scrollTop = c.scrollHeight;
+  }, [messages]);
 
   async function onScroll() {
     const c = containerRef.current;

@@ -112,6 +112,7 @@ export function AppShell() {
             />
             <div className="relative min-h-0 flex-1 bg-slate-100 dark:bg-slate-950">
               <MessageList
+                key={activeRoom.roomId}
                 messages={messages}
                 onReply={setReplyTo}
                 onReact={(eventId, emoji) => void toggleReaction(activeRoom.roomId, eventId, emoji)}
