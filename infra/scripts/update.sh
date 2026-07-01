@@ -9,6 +9,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE="docker compose -f $ROOT_DIR/infra/docker-compose.yml"
 cd "$ROOT_DIR"
 
+# Compose carga el .env junto al compose (infra/); symlink al .env de la raíz.
+ln -sf ../.env infra/.env
+
 echo "==> 1/5 Backup previo…"
 ./infra/scripts/backup.sh || echo "  (backup falló o DB no arriba; continúa bajo tu responsabilidad)"
 

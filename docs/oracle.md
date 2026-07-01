@@ -72,6 +72,9 @@ no se instala sobre HTTP** (los navegadores exigen contexto seguro).
 ```bash
 git clone https://github.com/Alianza-Indigo/Chatter.git whalabi && cd whalabi
 cp .env.example .env
+# IMPORTANTE: Compose busca el .env junto al compose (infra/). Symlink para que
+# `docker compose -f infra/docker-compose.yml` cargue el .env de la raíz:
+ln -sf ../.env infra/.env
 
 DOMAIN=chat.tu-org.com   # tu dominio
 

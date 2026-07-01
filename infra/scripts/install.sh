@@ -24,6 +24,9 @@ SERVER_NAME="${SERVER_NAME:-whalabi.local}"
 
 echo "==> 1/8 Preparando .env"
 [[ -f .env ]] || cp .env.example .env
+# Docker Compose busca el .env junto al compose (infra/). Symlink para que
+# `docker compose -f infra/docker-compose.yml` cargue el .env de la raíz.
+ln -sf ../.env infra/.env
 gen() { openssl rand -hex "${1:-24}"; }
 setkv() { # setkv KEY VALUE  (solo si está vacío o es placeholder change-me/localhost)
   local k="$1" v="$2" cur
