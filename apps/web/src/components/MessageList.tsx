@@ -205,7 +205,7 @@ export function MessageList({
   }
 
   return (
-    <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto p-4">
+    <div ref={containerRef} onScroll={onScroll} className="scroll-touch h-full overflow-y-auto p-4">
       {loadingOlder && <p className="mb-2 text-center text-xs text-slate-400">Cargando historial…</p>}
       <div className="flex flex-col gap-1.5">
         {messages.map((m, i) => {

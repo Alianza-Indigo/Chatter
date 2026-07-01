@@ -70,7 +70,7 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-slate-100 dark:bg-slate-950">
+    <div className="app-viewport flex w-full overflow-hidden bg-slate-100 dark:bg-slate-950">
       <div className={`${activeRoomId ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96`}>
         <Sidebar rooms={rooms} activeRoomId={activeRoomId} onSelect={setActiveRoomId} />
       </div>

@@ -13,6 +13,22 @@ body {
   height: 100%;
 }
 
+/* Alto de viewport robusto para el chat en PWA/standalone: dvh moderno con
+   fallback a vh (algunos webviews en modo app no calculan bien dvh y colapsan
+   la altura, dejando el scroll interno sin espacio y "trabado"). */
+.app-viewport {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Contenedor con scroll táctil fiable dentro de la app instalada. Sin esto, en
+   iOS/Android standalone el gesto de scroll no engancha el contenedor interno. */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
 body {
   @apply bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
 }

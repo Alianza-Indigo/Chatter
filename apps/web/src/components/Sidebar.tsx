@@ -77,7 +77,7 @@ export function Sidebar({
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="scroll-touch flex-1 overflow-y-auto">
         <RoomList rooms={filtered} activeRoomId={activeRoomId} onSelect={onSelect} />
       </div>
 
