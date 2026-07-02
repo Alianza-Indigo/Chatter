@@ -4,8 +4,8 @@
  * al shell offline. NO cachea respuestas de Matrix (sync/mensajes) — esos
  * deben ir siempre a la red.
  */
-const CACHE = 'whalabi-shell-v1';
-const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/icon.svg'];
+const CACHE = 'whalabi-shell-v2';
+const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -54,8 +54,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: '/icons/icon.svg',
-      badge: '/icons/icon.svg',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
       data: { url: payload.url },
     }),
   );
