@@ -45,12 +45,21 @@ export async function sendToUser(
   let sent = 0;
   let pruned = 0;
 
+  // Las llamadas van con urgencia alta y TTL corto: FCM las entrega de inmediato
+  // aunque el teléfono esté en reposo, y no tiene sentido entregar una llamada
+  // vieja. Los mensajes normales van con urgencia normal y TTL largo.
+  const options =
+    payload.type === 'call'
+      ? { urgency: 'high' as const, TTL: 30 }
+      : { urgency: 'normal' as const, TTL: 3600 };
+
   await Promise.all(
     subs.map(async (s) => {
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
           JSON.stringify(payload),
+          options,
         );
         sent += 1;
       } catch (err) {
