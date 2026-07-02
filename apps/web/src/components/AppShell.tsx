@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TimelineMessage } from '@whalabi/matrix';
 import { useMatrix } from '@/lib/matrix-provider';
+import { usePush } from '@/lib/use-push';
 import { Sidebar } from './Sidebar';
 import { ChatHeader } from './ChatHeader';
 import { MessageList } from './MessageList';
@@ -15,6 +16,7 @@ import { CallOverlay } from './CallOverlay';
 export function AppShell() {
   const {
     rooms,
+    session,
     sendMessage,
     sendAttachment,
     toggleReaction,
@@ -25,6 +27,12 @@ export function AppShell() {
     loadOlder,
     setRoomName,
   } = useMatrix();
+
+  // Auto-suscribir a Web Push para recibir avisos de llamada con la app cerrada.
+  const push = usePush(session?.userId ?? null);
+  useEffect(() => {
+    if (push.state === 'idle') void push.subscribe();
+  }, [push.state, push.subscribe]);
 
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [messages, setMessages] = useState<TimelineMessage[]>([]);

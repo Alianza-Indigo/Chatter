@@ -20,6 +20,7 @@ import type {
   WhalabiSession,
 } from '@whalabi/matrix';
 import { clearSession, loadSession, saveSession } from './session';
+import { config } from './config';
 
 interface MatrixContextValue {
   ready: boolean;
@@ -157,7 +158,28 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       searchUsers: (term) => client.searchUsers(term),
       startDirectMessage: (userId) => client.startDirectMessage(userId),
       activeCall,
-      placeCall: (roomId, video) => client.placeCall(roomId, video),
+      placeCall: async (roomId, video) => {
+        await client.placeCall(roomId, video);
+        // Avisar por push al otro para que le suene con la app en segundo plano.
+        try {
+          const members = client.getMembers(roomId);
+          const me = members.find((m) => m.isSelf);
+          const peer = members.find((m) => !m.isSelf && m.membership === 'join');
+          if (peer) {
+            await fetch(`${config.apiUrl}/api/push/notify-call`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                toUserId: peer.userId,
+                callerName: me?.displayName ?? 'Alguien',
+                video,
+              }),
+            });
+          }
+        } catch {
+          /* el push es best-effort; la llamada sigue igual */
+        }
+      },
       answerCall: () => client.answerCall(),
       rejectCall: () => client.rejectCall(),
       hangupCall: () => client.hangupCall(),

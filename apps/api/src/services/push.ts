@@ -29,6 +29,8 @@ export interface PushPayload {
   title: string;
   body: string;
   url?: string;
+  /** 'call' | 'message' — el service worker lo usa para el estilo del aviso. */
+  type?: string;
 }
 
 /** Envía una notificación a todas las suscripciones de un usuario en un tenant. */
