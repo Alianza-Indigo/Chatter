@@ -4,7 +4,7 @@
  * al shell offline. NO cachea respuestas de Matrix (sync/mensajes) — esos
  * deben ir siempre a la red.
  */
-const CACHE = 'whalabi-shell-v5';
+const CACHE = 'whalabi-shell-v6';
 const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -57,11 +57,18 @@ self.addEventListener('push', (event) => {
       body: payload.body,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      // Las llamadas suenan/vibran e insisten hasta que el usuario interactúe.
+      // Las llamadas suenan/vibran, insisten y muestran botones Contestar/Rechazar.
       tag: isCall ? 'whalabi-call' : undefined,
       renotify: isCall,
       requireInteraction: isCall,
-      vibrate: isCall ? [600, 300, 600, 300, 600] : [200],
+      silent: false,
+      vibrate: isCall ? [600, 300, 600, 300, 600, 300, 600] : [200],
+      actions: isCall
+        ? [
+            { action: 'answer', title: '📞 Contestar' },
+            { action: 'decline', title: '✕ Rechazar' },
+          ]
+        : [],
       data: { url: payload.url || '/chat' },
     }),
   );
@@ -69,6 +76,8 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  // "Rechazar" solo cierra el aviso; cualquier otra acción o el toque abre la app.
+  if (event.action === 'decline') return;
   const url = (event.notification.data && event.notification.data.url) || '/chat';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
