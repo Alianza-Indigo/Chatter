@@ -165,15 +165,13 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
           const members = client.getMembers(roomId);
           const me = members.find((m) => m.isSelf);
           const peer = members.find((m) => !m.isSelf && m.membership === 'join');
+          const localpart = session?.userId.replace(/^@/, '').split(':')[0] ?? 'Alguien';
+          const callerName = me?.displayName || localpart;
           if (peer) {
             await fetch(`${config.apiUrl}/api/push/notify-call`, {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({
-                toUserId: peer.userId,
-                callerName: me?.displayName ?? 'Alguien',
-                video,
-              }),
+              body: JSON.stringify({ toUserId: peer.userId, callerName, video }),
             });
           }
         } catch {

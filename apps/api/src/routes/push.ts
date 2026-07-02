@@ -67,8 +67,9 @@ export async function pushRoutes(app: FastifyInstance): Promise<void> {
     if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
 
     const result = await sendToUser(tenant.id, toUserId, {
-      title: `${video ? 'Videollamada' : 'Llamada'} entrante`,
-      body: callerName,
+      // El nombre de quien llama va como título (prominente); el cuerpo describe.
+      title: callerName,
+      body: `${video ? 'Videollamada' : 'Llamada'} entrante`,
       url: '/chat',
       type: 'call',
     });

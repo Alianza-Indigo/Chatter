@@ -344,13 +344,26 @@ export class WhalabiMatrixClient {
       isVideo: c.type === CallType.Video,
       incoming: this.callIncoming,
       phase: this.phaseFromState(c.state, this.callIncoming),
-      peerName: c.getOpponentMember()?.name ?? 'Llamada',
+      peerName: this.opponentName(c),
       micMuted: c.isMicrophoneMuted(),
       cameraMuted: c.isLocalVideoMuted(),
       localStream: local?.stream ?? null,
       remoteStream: remote?.stream ?? null,
     };
     this.callHandlers.forEach((h) => h(snap));
+  }
+
+  /** Nombre del interlocutor de una llamada, con varios fallbacks. */
+  private opponentName(c: MatrixCall): string {
+    const m = c.getOpponentMember();
+    if (m?.name) return m.name;
+    const room = this.client?.getRoom(c.roomId);
+    const other = room
+      ?.getMembers()
+      .find((mm) => mm.membership === 'join' && mm.userId !== this.session?.userId);
+    if (other?.name) return other.name;
+    const uid = m?.userId ?? other?.userId ?? '';
+    return uid.replace(/^@/, '').split(':')[0] || 'Llamada';
   }
 
   /** Se une automáticamente a las invitaciones pendientes (experiencia WhatsApp). */
