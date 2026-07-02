@@ -16,6 +16,7 @@ import type {
   TimelineMessage,
   RoomMember,
   UserSearchResult,
+  ActiveCall,
   WhalabiSession,
 } from '@whalabi/matrix';
 import { clearSession, loadSession, saveSession } from './session';
@@ -42,6 +43,13 @@ interface MatrixContextValue {
   invite: (roomId: string, userId: string) => Promise<void>;
   searchUsers: (term: string) => Promise<UserSearchResult[]>;
   startDirectMessage: (userId: string) => Promise<string>;
+  activeCall: ActiveCall | null;
+  placeCall: (roomId: string, video: boolean) => Promise<void>;
+  answerCall: () => Promise<void>;
+  rejectCall: () => void;
+  hangupCall: () => void;
+  setMicMuted: (muted: boolean) => Promise<void>;
+  setCameraMuted: (muted: boolean) => Promise<void>;
   setRoomName: (roomId: string, name: string) => Promise<void>;
   getMembers: (roomId: string) => RoomMember[];
   getTimeline: (roomId: string) => TimelineMessage[];
@@ -65,6 +73,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   const [syncState, setSyncState] = useState('STOPPED');
   const [session, setSession] = useState<WhalabiSession | null>(null);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
 
   useEffect(() => {
     const saved = loadSession();
@@ -92,9 +101,11 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const offRooms = client.onRoomsUpdated(setRooms);
     const offSync = client.onSyncState(setSyncState);
+    const offCall = client.onCall(setActiveCall);
     return () => {
       offRooms();
       offSync();
+      offCall();
     };
   }, [client]);
 
@@ -145,6 +156,13 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
       invite: (roomId, userId) => client.invite(roomId, userId),
       searchUsers: (term) => client.searchUsers(term),
       startDirectMessage: (userId) => client.startDirectMessage(userId),
+      activeCall,
+      placeCall: (roomId, video) => client.placeCall(roomId, video),
+      answerCall: () => client.answerCall(),
+      rejectCall: () => client.rejectCall(),
+      hangupCall: () => client.hangupCall(),
+      setMicMuted: (muted) => client.setMicMuted(muted),
+      setCameraMuted: (muted) => client.setCameraMuted(muted),
       setRoomName: (roomId, name) => client.setRoomName(roomId, name),
       getMembers: (roomId) => client.getMembers(roomId),
       getTimeline: (roomId) => client.getTimeline(roomId),
@@ -162,7 +180,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
           if (rid === roomId) cb(userIds);
         }),
     }),
-    [ready, syncState, session, rooms, login, register, logout, client],
+    [ready, syncState, session, rooms, activeCall, login, register, logout, client],
   );
 
   return <MatrixContext.Provider value={value}>{children}</MatrixContext.Provider>;

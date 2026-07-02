@@ -47,8 +47,9 @@ echo "==> Aplicando config de Whalabi (homeserver.yaml + log.config)…"
 #    git nunca toca $SYNAPSE_DIR porque la fuente vive en $CONFIG_DIR.
 : "${RECAPTCHA_PUBLIC_KEY:=}"
 : "${RECAPTCHA_PRIVATE_KEY:=}"
+: "${TURN_SHARED_SECRET:=}"
 export MATRIX_DEFAULT_SERVER_NAME APP_PUBLIC_URL MATRIX_REGISTRATION_SHARED_SECRET
-export RECAPTCHA_PUBLIC_KEY RECAPTCHA_PRIVATE_KEY
+export RECAPTCHA_PUBLIC_KEY RECAPTCHA_PRIVATE_KEY TURN_SHARED_SECRET
 
 # Escribe stdin al destino usando sudo solo si el archivo destino (o su carpeta,
 # si no existe) no es escribible por el usuario actual. Checar el ARCHIVO, no solo
@@ -63,7 +64,7 @@ write_to() {
   fi
 }
 
-envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET} ${RECAPTCHA_PUBLIC_KEY} ${RECAPTCHA_PRIVATE_KEY}' \
+envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET} ${RECAPTCHA_PUBLIC_KEY} ${RECAPTCHA_PRIVATE_KEY} ${TURN_SHARED_SECRET}' \
   < "$CONFIG_DIR/homeserver.yaml.template" \
   | write_to "$SYNAPSE_DIR/homeserver.yaml"
 

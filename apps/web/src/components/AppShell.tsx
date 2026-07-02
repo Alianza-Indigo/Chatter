@@ -10,6 +10,7 @@ import { MessageComposer } from './MessageComposer';
 import { EmptyState } from './states';
 import { Modal } from './Modal';
 import { InviteModal, MembersModal } from './RoomModals';
+import { CallOverlay } from './CallOverlay';
 
 export function AppShell() {
   const {
@@ -154,6 +155,8 @@ export function AppShell() {
           </Modal>
         </>
       )}
+
+      <CallOverlay />
     </div>
   );
 }

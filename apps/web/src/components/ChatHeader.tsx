@@ -16,10 +16,20 @@ export function ChatHeader({
   onRename: () => void;
   onBack?: () => void;
 }) {
-  const { syncState } = useMatrix();
+  const { syncState, placeCall, activeCall } = useMatrix();
   if (!room) return null;
 
   const online = syncState === 'SYNCING' || syncState === 'PREPARED';
+  const inCall = Boolean(activeCall);
+
+  async function call(video: boolean) {
+    if (!room || inCall) return;
+    try {
+      await placeCall(room.roomId, video);
+    } catch {
+      /* la UI de llamada muestra el estado; un fallo aquí no debe romper el header */
+    }
+  }
 
   return (
     <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
@@ -48,6 +58,26 @@ export function ChatHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => void call(false)}
+          disabled={inCall}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+          aria-label="Llamada de voz"
+          title="Llamada de voz"
+        >
+          📞
+        </button>
+        <button
+          type="button"
+          onClick={() => void call(true)}
+          disabled={inCall}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+          aria-label="Videollamada"
+          title="Videollamada"
+        >
+          📹
+        </button>
         <button
           type="button"
           onClick={onMembers}

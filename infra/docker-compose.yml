@@ -75,6 +75,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Servidor TURN/STUN para llamadas WebRTC 1:1. Usa host networking porque
+  # necesita un rango de puertos UDP de relay accesibles directamente. Comparte
+  # el secreto (TURN_SHARED_SECRET) con Synapse; no hay conexión directa entre
+  # ambos, solo credenciales HMAC con tiempo de vida.
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      -n --log-file=stdout --use-auth-secret
+      --static-auth-secret=${TURN_SHARED_SECRET:-changeme-turn-secret}
+      --realm=${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
+      --listening-port=3478 --min-port=49160 --max-port=49200
+      --no-tls --no-dtls --no-cli --no-multicast-peers
+      ${TURN_EXTERNAL_IP:+--external-ip=}${TURN_EXTERNAL_IP}
+
   api:
     profiles: ["full"]
     build:

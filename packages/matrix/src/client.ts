@@ -22,6 +22,14 @@ import {
   Visibility,
   RelationType,
 } from 'matrix-js-sdk';
+import {
+  CallEvent,
+  CallState,
+  CallType,
+  CallErrorCode,
+  type MatrixCall,
+} from 'matrix-js-sdk/lib/webrtc/call';
+import { CallEventHandlerEvent } from 'matrix-js-sdk/lib/webrtc/callEventHandler';
 import { serverNameFromUserId } from '@whalabi/shared';
 import type {
   LoginParams,
@@ -32,12 +40,15 @@ import type {
   RoomMember,
   UserProfile,
   UserSearchResult,
+  ActiveCall,
+  CallPhase,
   WhalabiSession,
 } from './types';
 
 export type RoomsUpdatedHandler = (rooms: RoomSummary[]) => void;
 export type TimelineUpdatedHandler = (roomId: string, messages: TimelineMessage[]) => void;
 export type SyncStateHandler = (state: string) => void;
+export type CallHandler = (call: ActiveCall | null) => void;
 export type TypingHandler = (roomId: string, userIds: string[]) => void;
 
 export class WhalabiMatrixClient {
@@ -48,6 +59,11 @@ export class WhalabiMatrixClient {
   private timelineHandlers = new Set<TimelineUpdatedHandler>();
   private syncHandlers = new Set<SyncStateHandler>();
   private typingHandlers = new Set<TypingHandler>();
+  private callHandlers = new Set<CallHandler>();
+
+  // Llamada 1:1 activa (WebRTC vía matrix-js-sdk). Solo una a la vez.
+  private currentCall: MatrixCall | null = null;
+  private callIncoming = false;
 
   // -------------------------------------------------------------------------
   // Autenticación
@@ -228,11 +244,113 @@ export class WhalabiMatrixClient {
       this.typingHandlers.forEach((h) => h(member.roomId, typing));
     });
 
+    // Llamadas entrantes (WebRTC 1:1).
+    client.on(CallEventHandlerEvent.Incoming, (call: MatrixCall) => {
+      // Solo una llamada a la vez: rechazar si ya hay una en curso.
+      if (this.currentCall && this.currentCall.state !== CallState.Ended) {
+        call.reject();
+        return;
+      }
+      this.setupCall(call, true);
+    });
+
     await client.startClient({ initialSyncLimit: 30 });
   }
 
   stopSync(): void {
     this.client?.stopClient();
+  }
+
+  // -------------------------------------------------------------------------
+  // Llamadas 1:1 (audio/video, WebRTC)
+  // -------------------------------------------------------------------------
+
+  /** Inicia una llamada saliente en el room (audio o video). */
+  async placeCall(roomId: string, video: boolean): Promise<void> {
+    if (!this.client) throw new Error('Cliente no inicializado');
+    if (this.currentCall && this.currentCall.state !== CallState.Ended) return;
+    const call = this.client.createCall(roomId);
+    if (!call) throw new Error('No se pudo iniciar la llamada en esta conversación');
+    this.setupCall(call, false);
+    if (video) await call.placeVideoCall();
+    else await call.placeVoiceCall();
+  }
+
+  async answerCall(): Promise<void> {
+    await this.currentCall?.answer();
+  }
+
+  rejectCall(): void {
+    this.currentCall?.reject();
+  }
+
+  hangupCall(): void {
+    this.currentCall?.hangup(CallErrorCode.UserHangup, false);
+  }
+
+  async setMicMuted(muted: boolean): Promise<void> {
+    await this.currentCall?.setMicrophoneMuted(muted);
+    this.emitCall();
+  }
+
+  async setCameraMuted(muted: boolean): Promise<void> {
+    await this.currentCall?.setLocalVideoMuted(muted);
+    this.emitCall();
+  }
+
+  onCall(h: CallHandler): () => void {
+    this.callHandlers.add(h);
+    return () => this.callHandlers.delete(h);
+  }
+
+  private setupCall(call: MatrixCall, incoming: boolean): void {
+    this.currentCall = call;
+    this.callIncoming = incoming;
+    call.on(CallEvent.State, () => this.emitCall());
+    call.on(CallEvent.FeedsChanged, () => this.emitCall());
+    call.on(CallEvent.Error, () => this.emitCall());
+    call.on(CallEvent.Hangup, () => {
+      this.emitCall();
+      // Cerrar la UI poco después de colgar.
+      setTimeout(() => {
+        if (this.currentCall === call) {
+          this.currentCall = null;
+          this.callHandlers.forEach((h) => h(null));
+        }
+      }, 1200);
+    });
+    this.emitCall();
+  }
+
+  private phaseFromState(state: CallState, incoming: boolean): CallPhase {
+    if (state === CallState.Ended) return 'ended';
+    if (state === CallState.Connected) return 'connected';
+    if (incoming && (state === CallState.Ringing || state === CallState.Fledgling)) return 'ringing';
+    return 'connecting';
+  }
+
+  private emitCall(): void {
+    const c = this.currentCall;
+    if (!c) {
+      this.callHandlers.forEach((h) => h(null));
+      return;
+    }
+    const feeds = c.getFeeds();
+    const local = feeds.find((f) => f.isLocal());
+    const remote = feeds.find((f) => !f.isLocal());
+    const snap: ActiveCall = {
+      callId: c.callId,
+      roomId: c.roomId,
+      isVideo: c.type === CallType.Video,
+      incoming: this.callIncoming,
+      phase: this.phaseFromState(c.state, this.callIncoming),
+      peerName: c.getOpponentMember()?.name ?? 'Llamada',
+      micMuted: c.isMicrophoneMuted(),
+      cameraMuted: c.isLocalVideoMuted(),
+      localStream: local?.stream ?? null,
+      remoteStream: remote?.stream ?? null,
+    };
+    this.callHandlers.forEach((h) => h(snap));
   }
 
   /** Se une automáticamente a las invitaciones pendientes (experiencia WhatsApp). */

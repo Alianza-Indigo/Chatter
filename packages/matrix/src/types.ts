@@ -86,3 +86,21 @@ export interface UserSearchResult {
   displayName: string | null;
   avatarUrl: string | null;
 }
+
+/** Fase de una llamada 1:1. */
+export type CallPhase = 'ringing' | 'connecting' | 'connected' | 'ended';
+
+/** Estado de la llamada activa que consume la UI. */
+export interface ActiveCall {
+  callId: string;
+  roomId: string;
+  isVideo: boolean;
+  /** true si la llamada es entrante (nos llaman). */
+  incoming: boolean;
+  phase: CallPhase;
+  peerName: string;
+  micMuted: boolean;
+  cameraMuted: boolean;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+}
