@@ -15,19 +15,24 @@ export function CallOverlay() {
 
   const remoteStream = activeCall?.remoteStream ?? null;
   const localStream = activeCall?.localStream ?? null;
+  const phase = activeCall?.phase;
+  const isVideo = activeCall?.isVideo;
 
+  // Enganchar los streams a los elementos. Depende también de phase/isVideo
+  // porque los <video> se montan/desmontan según la fase: si el stream llegó
+  // antes de que el elemento existiera, hay que re-enganchar cuando aparece.
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) remoteVideoRef.current.srcObject = remoteStream;
     if (remoteAudioRef.current && remoteStream) remoteAudioRef.current.srcObject = remoteStream;
-  }, [remoteStream]);
+  }, [remoteStream, phase, isVideo]);
 
   useEffect(() => {
     if (localVideoRef.current && localStream) localVideoRef.current.srcObject = localStream;
-  }, [localStream]);
+  }, [localStream, phase, isVideo]);
 
   if (!activeCall) return null;
 
-  const { isVideo, incoming, phase, peerName, micMuted, cameraMuted } = activeCall;
+  const { incoming, peerName, micMuted, cameraMuted } = activeCall;
   const ringingIncoming = incoming && phase === 'ringing';
   const statusText =
     phase === 'ringing'
