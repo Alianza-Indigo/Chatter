@@ -4,7 +4,7 @@
  * al shell offline. NO cachea respuestas de Matrix (sync/mensajes) — esos
  * deben ir siempre a la red.
  */
-const CACHE = 'whalabi-shell-v4';
+const CACHE = 'whalabi-shell-v5';
 const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
