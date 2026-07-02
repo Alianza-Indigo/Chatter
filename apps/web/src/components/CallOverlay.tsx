@@ -3,6 +3,44 @@
 import { useEffect, useRef } from 'react';
 import { useMatrix } from '@/lib/matrix-provider';
 
+/** Tono de llamada tipo timbre usando Web Audio (ráfaga cada 3s). Devuelve stop(). */
+function startRingtone(): () => void {
+  let context: AudioContext | null = null;
+  try {
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return () => {};
+    context = new AC();
+  } catch {
+    return () => {};
+  }
+  const ctx = context;
+  let stopped = false;
+  const burst = () => {
+    if (stopped) return;
+    const t0 = ctx.currentTime;
+    for (const f of [440, 480]) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.12, t0 + 0.05);
+      gain.gain.setValueAtTime(0.12, t0 + 0.9);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.0);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 1.0);
+    }
+  };
+  void ctx.resume().catch(() => {});
+  burst();
+  const interval = window.setInterval(burst, 3000);
+  return () => {
+    stopped = true;
+    clearInterval(interval);
+    void ctx.close().catch(() => {});
+  };
+}
+
 /**
  * Overlay de llamada 1:1 (audio/video). Se monta siempre a nivel de app para que
  * las llamadas entrantes aparezcan sin importar en qué pantalla estés.
@@ -29,6 +67,47 @@ export function CallOverlay() {
   useEffect(() => {
     if (localVideoRef.current && localStream) localVideoRef.current.srcObject = localStream;
   }, [localStream, phase, isVideo]);
+
+  // Aviso de llamada entrante: tono + vibración + notificación del sistema.
+  const ringing = activeCall?.incoming === true && phase === 'ringing';
+  const ringPeer = activeCall?.peerName ?? '';
+  const ringVideo = isVideo === true;
+  useEffect(() => {
+    if (!ringing) return;
+    const stopTone = startRingtone();
+
+    let vib: ReturnType<typeof setInterval> | undefined;
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      const buzz = () => navigator.vibrate([600, 400]);
+      buzz();
+      vib = setInterval(buzz, 1500);
+    }
+
+    let notif: Notification | undefined;
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        notif = new Notification(`${ringVideo ? 'Videollamada' : 'Llamada'} entrante`, {
+          body: ringPeer,
+          tag: 'whalabi-call',
+          icon: '/icons/icon-192.png',
+          requireInteraction: true,
+        });
+        notif.onclick = () => {
+          window.focus();
+          notif?.close();
+        };
+      }
+    } catch {
+      /* notificaciones no disponibles */
+    }
+
+    return () => {
+      stopTone();
+      if (vib) clearInterval(vib);
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(0);
+      notif?.close();
+    };
+  }, [ringing, ringPeer, ringVideo]);
 
   if (!activeCall) return null;
 

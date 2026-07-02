@@ -40,6 +40,13 @@ export function AppShell() {
     [rooms, activeRoomId],
   );
 
+  // Pedir permiso de notificaciones una vez (para avisar de llamadas entrantes).
+  useEffect(() => {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
   // Fija la altura real de la ventana en móvil. OJO: al hacer scroll, la barra de
   // direcciones se colapsa y dispara "resize" continuamente; si recalculáramos la
   // altura en cada uno, el scroll se traba a media pasada. Por eso solo aplicamos
