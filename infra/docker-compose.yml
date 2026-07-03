@@ -175,6 +175,26 @@ services:
     ports:
       - "3000:3000"
 
+  # Servidor de notificaciones autohospedado (UnifiedPush, sin Google).
+  # Trae "Matrix Gateway" integrado: Synapse le manda el push y ntfy lo entrega
+  # al dispositivo. Se expone en ntfy.<dominio> vía Caddy.
+  ntfy:
+    profiles: ["full"]
+    image: binwiederhier/ntfy:latest
+    command: serve
+    restart: unless-stopped
+    environment:
+      NTFY_BASE_URL: https://ntfy.${WHALABI_DOMAIN:-localhost}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
+      NTFY_CACHE_DURATION: "12h"
+      NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
+      NTFY_ATTACHMENT_CACHE_DIR: /var/lib/ntfy/attachments
+      NTFY_ENABLE_SIGNUP: "false"
+    volumes:
+      - ntfy-data:/var/lib/ntfy
+
   nginx:
     profiles: ["proxy"]
     image: nginx:alpine
@@ -210,5 +230,6 @@ volumes:
   pg-synapse:
   pg-app:
   bot-storage:
+  ntfy-data:
   caddy-data:
   caddy-config:

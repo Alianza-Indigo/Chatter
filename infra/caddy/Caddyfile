@@ -41,3 +41,10 @@
 		reverse_proxy web:3000
 	}
 }
+
+# Notificaciones push autohospedadas (UnifiedPush / ntfy). HTTPS automático.
+# Requiere un registro DNS: ntfy.<dominio> -> misma IP pública del servidor.
+ntfy.{$WHALABI_DOMAIN} {
+	encode gzip
+	reverse_proxy ntfy:80
+}
