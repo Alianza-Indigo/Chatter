@@ -7,6 +7,17 @@ import { z } from 'zod';
 export const llmProviderKindSchema = z.enum(['openai', 'ollama', 'dummy', 'gemini']);
 export const botResponseModeSchema = z.enum(['mention', 'dm', 'always']);
 
+/**
+ * Código de acceso de una organización. Amigable de teclear: letras, números,
+ * guiones y guiones bajos; sin espacios. Se compara sin distinguir mayúsculas.
+ */
+export const orgCodeSchema = z
+  .string()
+  .trim()
+  .min(3, 'El código es muy corto')
+  .max(48)
+  .regex(/^[a-zA-Z0-9_-]+$/, 'Solo letras, números, guiones y guiones bajos');
+
 export const tenantBrandingSchema = z.object({
   primaryColor: z
     .string()
@@ -19,7 +30,7 @@ export const tenantBrandingSchema = z.object({
   tagline: z.string().max(140).nullable().optional(),
 });
 
-/** Cuerpo para crear un tenant. */
+/** Cuerpo para crear una organización (tenant). */
 export const createTenantSchema = z.object({
   name: z.string().min(2).max(120),
   slug: z
@@ -27,9 +38,18 @@ export const createTenantSchema = z.object({
     .min(2)
     .max(64)
     .regex(/^[a-z0-9-]+$/, 'slug solo minúsculas, números y guiones'),
-  publicDomain: z.string().min(3).max(253),
-  matrixBaseUrl: z.string().url(),
-  matrixServerName: z.string().min(1),
+  /** Dominio propio (opcional). Por ahora se distingue por código, no por dominio. */
+  publicDomain: z.string().min(3).max(253).nullable().optional(),
+  /**
+   * Acceso: true (por defecto) = aislada con código; false = general (sin código,
+   * sus miembros van al espacio general).
+   */
+  requiresCode: z.boolean().default(true),
+  /** Solo si requiresCode. Si se omite, se genera del nombre. */
+  code: orgCodeSchema.optional(),
+  /** Matrix: por defecto el homeserver del despliegue (se rellena en el servidor). */
+  matrixBaseUrl: z.string().url().optional(),
+  matrixServerName: z.string().min(1).optional(),
   botUserId: z.string().nullable().optional(),
   botEnabled: z.boolean().default(false),
   botSystemPrompt: z.string().max(4000).nullable().optional(),
@@ -68,41 +88,6 @@ export const botLogsQuerySchema = z.object({
 });
 
 /**
- * Código de organización que el usuario introduce al registrarse. Amigable de
- * teclear: letras, números, guiones y guiones bajos; sin espacios. Se compara
- * sin distinguir mayúsculas (se normaliza a minúsculas al guardar y resolver).
- */
-export const orgCodeSchema = z
-  .string()
-  .trim()
-  .min(3, 'El código es muy corto')
-  .max(48)
-  .regex(/^[a-zA-Z0-9_-]+$/, 'Solo letras, números, guiones y guiones bajos');
-
-/** Cuerpo para crear una organización (panel admin). */
-export const createOrganizationSchema = z.object({
-  name: z.string().min(2).max(120),
-  /**
-   * true (por defecto) = organización aislada con código: se registra con él y
-   * solo se ven entre ellos. false = "sin código": sus miembros van al espacio
-   * general y se ven con todos los demás sin código.
-   */
-  requiresCode: z.boolean().default(true),
-  /** Solo aplica si requiresCode. Si se omite, se genera del nombre. */
-  code: orgCodeSchema.optional(),
-});
-
-/** Cuerpo para actualizar una organización (nombre y/o código). */
-export const updateOrganizationSchema = z
-  .object({
-    name: z.string().min(2).max(120).optional(),
-    code: orgCodeSchema.optional(),
-  })
-  .refine((v) => v.name !== undefined || v.code !== undefined, {
-    message: 'Envía al menos un campo (name o code).',
-  });
-
-/**
  * Cuerpo para unir al usuario recién registrado a su espacio.
  * El usuario se autentica con su propio access token de Matrix (Authorization:
  * Bearer), no aquí; este cuerpo solo trae el código (vacío = espacio Global).
@@ -128,8 +113,6 @@ export const pushUnsubscribeSchema = z.object({
 });
 
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
-export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
-export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 export type PushSubscriptionInput = z.infer<typeof pushSubscriptionSchema>;
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;

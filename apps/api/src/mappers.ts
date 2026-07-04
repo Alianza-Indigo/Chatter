@@ -1,5 +1,5 @@
-import type { Organization as PrismaOrg, Tenant as PrismaTenant } from '@prisma/client';
-import type { Organization, Tenant, PublicTenantConfig, TenantBranding } from '@whalabi/shared';
+import type { Tenant as PrismaTenant } from '@prisma/client';
+import type { Tenant, PublicTenantConfig, TenantBranding } from '@whalabi/shared';
 
 function branding(t: PrismaTenant): TenantBranding {
   return {
@@ -17,6 +17,8 @@ export function toTenant(t: PrismaTenant): Tenant {
     name: t.name,
     slug: t.slug,
     publicDomain: t.publicDomain,
+    code: t.code,
+    spaceId: t.spaceId,
     matrixBaseUrl: t.matrixBaseUrl,
     matrixServerName: t.matrixServerName,
     botUserId: t.botUserId,
@@ -32,19 +34,6 @@ export function toTenant(t: PrismaTenant): Tenant {
     allowRegistration: t.allowRegistration,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
-  };
-}
-
-/** Mapea una Organización de Prisma al tipo de dominio. */
-export function toOrganization(o: PrismaOrg): Organization {
-  return {
-    id: o.id,
-    tenantId: o.tenantId,
-    name: o.name,
-    code: o.code,
-    spaceId: o.spaceId,
-    createdAt: o.createdAt.toISOString(),
-    updatedAt: o.updatedAt.toISOString(),
   };
 }
 

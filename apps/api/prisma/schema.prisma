@@ -48,12 +48,24 @@ enum InvitationStatus {
   revoked
 }
 
-/// Una organización dentro de Whalabi, resuelta por dominio público.
+/// Una organización de Whalabi. Es la entidad de primer nivel: tiene su
+/// "personalidad" (nombre, marca, bot, LLM) y su forma de acceso:
+///   - code = null  -> "sin código" (general): sus miembros entran sin código
+///                     y se ven con los demás sin código (espacio general).
+///   - code != null -> "con código" (aislada): se registran con el código y
+///                     solo se ven entre ellos (su propio espacio).
+/// publicDomain es opcional: por ahora todas conviven en un solo dominio y se
+/// distinguen por código; en el futuro cada una podrá tener su subdominio.
 model Tenant {
   id               String          @id @default(cuid())
   name             String
   slug             String          @unique
-  publicDomain     String          @unique
+  /// Dominio propio (opcional). Si dos comparten dominio, se distinguen por código.
+  publicDomain     String?
+  /// Código de acceso. null = organización general (sin código).
+  code             String?         @unique
+  /// Espacio Matrix de la organización (sus miembros se unen aquí).
+  spaceId          String?
 
   // Matrix
   matrixBaseUrl    String
@@ -81,64 +93,32 @@ model Tenant {
   // Registro
   allowRegistration Boolean        @default(false)
 
-  /// Espacio Matrix "Global" del tenant. Los usuarios que se registran SIN
-  /// código de organización se unen aquí y se descubren entre sí. Se crea la
-  /// primera vez que se necesita (ensureGlobalSpace).
-  globalSpaceId    String?
-
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
   botLogs          BotLog[]
   pushSubscriptions PushSubscription[]
   invitations      Invitation[]
-  organizations    Organization[]
+  memberships      OrgMembership[]
   auditLogs        AuditLog[]
 
   @@index([publicDomain])
   @@index([slug])
 }
 
-/// Organización dentro de un tenant (multitenant híbrido por "código").
-/// Cada organización es un Espacio Matrix privado: quien se registra con el
-/// `code` se une solo a ese espacio y, con search_all_users:false en Synapse,
-/// solo puede descubrir a los demás miembros de su organización.
-model Organization {
+/// A qué organización pertenece cada usuario (MXID). Es el índice que consulta
+/// el módulo de Synapse (vía la API interna) para permitir o bloquear el
+/// contacto: solo pueden invitarse quienes comparten organización (tenantId).
+model OrgMembership {
   id        String   @id @default(cuid())
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tenantId  String
-  name      String
-  /// Código que el usuario introduce al registrarse (único por tenant).
-  /// null = organización "sin código": sus miembros van al espacio general.
-  code      String?
-  /// Espacio Matrix (!roomid:server) al que se une a los miembros de la org.
-  /// En las "sin código" es el espacio Global del tenant.
-  spaceId   String
-  createdBy String?
+  /// MXID completo, p. ej. @ana:whalabi.app. Único en el homeserver.
+  userId    String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships OrgMembership[]
-
-  @@unique([tenantId, code])
   @@index([tenantId])
-}
-
-/// A qué organización pertenece cada usuario (MXID). organizationId null = Global.
-/// Es el índice que consulta el módulo de Synapse (vía la API interna) para
-/// permitir o bloquear el contacto entre personas: solo se pueden invitar entre
-/// sí quienes comparten organización (o ambos son Globales).
-model OrgMembership {
-  id             String        @id @default(cuid())
-  tenantId       String
-  /// MXID completo, p. ej. @ana:whalabi.app. Único en el homeserver.
-  userId         String        @unique
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  organizationId String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-
-  @@index([organizationId])
 }
 
 /// Log operativo del bot. No guarda contenido salvo BOT_STORE_CONTENT=true.

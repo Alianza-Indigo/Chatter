@@ -1,22 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import {
-  createOrganizationSchema,
-  joinOrgSchema,
-  updateOrganizationSchema,
-} from '@whalabi/shared';
-import { requireAdmin } from '../middleware/auth.js';
-import { getTenantById, resolveTenantByDomain } from '../services/tenant.js';
-import {
-  backfillGlobalSpace,
-  createOrganization,
-  deleteOrganization,
-  joinUserToOrgSpace,
-  listOrganizations,
-  resolveOrgByCode,
-  updateOrganization,
-} from '../services/org.js';
+import { joinOrgSchema } from '@whalabi/shared';
+import { resolveTenantByCode, resolveTenantByDomain } from '../services/tenant.js';
+import { joinUserByCode } from '../services/org.js';
 import { whoami } from '../services/synapse-admin.js';
-import { toOrganization } from '../mappers.js';
 import { logger } from '../logger.js';
 
 function hostOf(req: { headers: Record<string, unknown> }): string {
@@ -28,27 +14,23 @@ function hostOf(req: { headers: Record<string, unknown> }): string {
 }
 
 /**
- * Ruta pública de multitenant híbrido.
- *   POST /api/org/join   Authorization: Bearer <access token Matrix>  { code? }
- *
- * El usuario recién registrado se autentica con su propio access token; la API
- * confirma su identidad (whoami) y lo une al espacio que le corresponde:
- * Global si no hay código, o el de la organización si el código es válido.
+ * Rutas públicas del multitenant híbrido (ingreso a organización).
+ *   GET  /api/org/check?code=   Valida un código ANTES de registrar.
+ *   POST /api/org/join          Une al usuario recién registrado a su espacio.
  */
 export async function orgPublicRoutes(app: FastifyInstance): Promise<void> {
-  // Comprueba un código ANTES de crear la cuenta, para no dejar cuentas
-  // huérfanas si está mal escrito. Devuelve el nombre para confirmar al usuario.
+  // Comprueba un código antes de crear la cuenta (evita cuentas huérfanas).
   app.get('/api/org/check', async (req, reply) => {
     const code = ((req.query as { code?: string }).code ?? '').trim();
-    if (!code) return reply.send({ valid: true, scope: 'global' });
-    const tenant = await resolveTenantByDomain(hostOf(req));
-    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
-    const org = await resolveOrgByCode(tenant.id, code);
+    if (!code) return reply.send({ valid: true, scope: 'general' });
+    const org = await resolveTenantByCode(code);
     return reply.send(
       org ? { valid: true, scope: 'organization', name: org.name } : { valid: false },
     );
   });
 
+  // Une al usuario a su organización. Se autentica con su propio access token
+  // Matrix (Authorization: Bearer); la API confirma su identidad con whoami.
   app.post('/api/org/join', async (req, reply) => {
     const parsed = joinOrgSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
@@ -61,16 +43,16 @@ export async function orgPublicRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: 'unauthorized', message: 'Falta el token de acceso.' });
     }
 
-    const tenant = await resolveTenantByDomain(hostOf(req));
-    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
+    const hostTenant = await resolveTenantByDomain(hostOf(req));
+    if (!hostTenant) return reply.code(404).send({ error: 'tenant_not_found' });
 
-    const userId = await whoami(tenant.matrixBaseUrl, token);
+    const userId = await whoami(hostTenant.matrixBaseUrl, token);
     if (!userId) {
       return reply.code(401).send({ error: 'unauthorized', message: 'Token de acceso inválido.' });
     }
 
     try {
-      const result = await joinUserToOrgSpace(tenant, userId, parsed.data.code);
+      const result = await joinUserByCode(hostTenant, userId, parsed.data.code);
       return reply.send(result);
     } catch (err) {
       const code = (err as { code?: string }).code;
@@ -80,98 +62,10 @@ export async function orgPublicRoutes(app: FastifyInstance): Promise<void> {
           message: 'El código de organización no es válido.',
         });
       }
-      logger.error({ err, userId }, 'Fallo al unir al usuario a su espacio');
+      logger.error({ err, userId }, 'Fallo al unir al usuario a su organización');
       return reply.code(502).send({
         error: 'join_failed',
-        message: 'No se pudo unir al espacio. Intenta de nuevo.',
-      });
-    }
-  });
-}
-
-/**
- * Rutas administrativas de organizaciones (protegidas por x-admin-token).
- *   GET  /api/admin/tenants/:id/orgs
- *   POST /api/admin/tenants/:id/orgs   { name, code? }
- */
-export async function orgAdminRoutes(app: FastifyInstance): Promise<void> {
-  app.addHook('preHandler', requireAdmin);
-
-  app.get('/api/admin/tenants/:id/orgs', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const tenant = await getTenantById(id);
-    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
-    const orgs = await listOrganizations(tenant.id);
-    return reply.send(orgs.map(toOrganization));
-  });
-
-  // Une a los usuarios existentes al Espacio Global (rollout de multitenant).
-  app.post('/api/admin/tenants/:id/global/backfill', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const tenant = await getTenantById(id);
-    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
-    try {
-      const result = await backfillGlobalSpace(tenant);
-      return reply.send(result);
-    } catch (err) {
-      return reply.code(502).send({
-        error: 'backfill_failed',
-        message: err instanceof Error ? err.message : 'No se pudo hacer el backfill.',
-      });
-    }
-  });
-
-  app.post('/api/admin/tenants/:id/orgs', async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const parsed = createOrganizationSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
-    }
-    const tenant = await getTenantById(id);
-    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
-    try {
-      const org = await createOrganization(tenant, parsed.data);
-      return reply.code(201).send(toOrganization(org));
-    } catch (err) {
-      return reply.code(409).send({
-        error: 'conflict',
-        message: err instanceof Error ? err.message : 'No se pudo crear la organización.',
-      });
-    }
-  });
-
-  app.patch('/api/admin/tenants/:id/orgs/:orgId', async (req, reply) => {
-    const { id, orgId } = req.params as { id: string; orgId: string };
-    const parsed = updateOrganizationSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
-    }
-    const tenant = await getTenantById(id);
-    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
-    try {
-      const org = await updateOrganization(tenant.id, orgId, parsed.data);
-      return reply.send(toOrganization(org));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'No se pudo actualizar.';
-      const notFound = message.includes('no encontrada');
-      return reply.code(notFound ? 404 : 409).send({
-        error: notFound ? 'not_found' : 'conflict',
-        message,
-      });
-    }
-  });
-
-  app.delete('/api/admin/tenants/:id/orgs/:orgId', async (req, reply) => {
-    const { id, orgId } = req.params as { id: string; orgId: string };
-    const tenant = await getTenantById(id);
-    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
-    try {
-      await deleteOrganization(tenant.id, orgId);
-      return reply.code(204).send();
-    } catch (err) {
-      return reply.code(404).send({
-        error: 'not_found',
-        message: err instanceof Error ? err.message : 'No se pudo borrar.',
+        message: 'No se pudo unir a la organización. Intenta de nuevo.',
       });
     }
   });

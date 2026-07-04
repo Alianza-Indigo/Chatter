@@ -30,8 +30,12 @@ export interface Tenant {
   id: string;
   name: string;
   slug: string;
-  /** Dominio público desde el que se accede (ej. chat.clinica-demo.mx). */
-  publicDomain: string;
+  /** Dominio propio (opcional). Por ahora se distingue por código, no por dominio. */
+  publicDomain: string | null;
+  /** Código de acceso. null = organización general (sin código). */
+  code: string | null;
+  /** Espacio Matrix de la organización (null hasta que se crea al primer ingreso). */
+  spaceId: string | null;
 
   // --- Matrix ---
   /** URL base del homeserver Matrix de este tenant (Client-Server API). */
@@ -72,29 +76,13 @@ export interface PublicTenantConfig {
   id: string;
   name: string;
   slug: string;
-  publicDomain: string;
+  publicDomain: string | null;
   matrixBaseUrl: string;
   matrixServerName: string;
   botEnabled: boolean;
   botUserId: string | null;
   allowRegistration: boolean;
   branding: TenantBranding;
-}
-
-/**
- * Organización dentro de un tenant (multitenant híbrido por "código").
- * Cada organización es un Espacio Matrix privado; quien se registra con el
- * `code` queda acotado a esa organización.
- */
-export interface Organization {
-  id: string;
-  tenantId: string;
-  name: string;
-  /** null = organización "sin código" (sus miembros van al espacio general). */
-  code: string | null;
-  spaceId: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 /** Entrada de log operativo del bot. Nunca guarda contenido salvo opt-in. */

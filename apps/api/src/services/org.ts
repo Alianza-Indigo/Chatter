@@ -1,44 +1,45 @@
-import type { Organization as PrismaOrg, Tenant as PrismaTenant } from '@prisma/client';
-import type { CreateOrganizationInput, UpdateOrganizationInput } from '@whalabi/shared';
+import type { Tenant as PrismaTenant } from '@prisma/client';
 import { prisma } from '../db.js';
 import { logger } from '../logger.js';
 import { createSpace, forceJoinRoom, listUsers } from './synapse-admin.js';
+import { resolveTenantByCode } from './tenant.js';
 
 /**
- * Organizaciones del multitenant híbrido.
+ * Ingreso y aislamiento de organizaciones (multitenant híbrido).
  *
- * Regla de producto:
- *   - Registro SIN código  -> el usuario se une al Espacio "Global" del tenant.
- *   - Registro CON código   -> el usuario se une SOLO al Espacio de esa org.
+ * La "organización" es el Tenant. Regla de producto:
+ *   - Registro SIN código  -> se une al espacio de la organización general
+ *     (el tenant resuelto por dominio, normalmente Whalabi).
+ *   - Registro CON código   -> se une SOLO al espacio de esa organización.
  *
- * Con `search_all_users: false` en Synapse, compartir espacio es lo único que
- * permite descubrirse; así el Global se comporta como WhatsApp (todos) y cada
- * organización queda aislada. Los espacios se crean vía la Synapse Admin API y
- * la unión se hace con force-join (el usuario no tiene que aceptar nada).
+ * Con `search_all_users:false` en Synapse, compartir espacio es lo único que
+ * permite descubrirse; y el módulo de aislamiento (vía mayContact) bloquea el
+ * contacto entre organizaciones distintas. Los espacios se crean vía la Synapse
+ * Admin API y la unión se hace con force-join.
  */
 
-/** Normaliza un código para comparar/guardar (minúsculas, sin espacios). */
-export function normalizeOrgCode(input: string): string {
-  return input.trim().toLowerCase();
+/** Asegura el espacio Matrix de una organización; lo crea la primera vez. */
+export async function ensureTenantSpace(tenant: PrismaTenant): Promise<string> {
+  if (tenant.spaceId) return tenant.spaceId;
+  const spaceId = await createSpace(tenant.matrixBaseUrl, tenant.name);
+  await prisma.tenant.update({ where: { id: tenant.id }, data: { spaceId } });
+  logger.info({ tenantId: tenant.id, spaceId }, 'Espacio de organización creado');
+  return spaceId;
 }
 
-/** Guarda/actualiza a qué organización pertenece un usuario (null = Global). */
-async function recordMembership(
-  tenantId: string,
-  userId: string,
-  organizationId: string | null,
-): Promise<void> {
+/** Guarda/actualiza a qué organización (tenant) pertenece un usuario. */
+async function recordMembership(tenantId: string, userId: string): Promise<void> {
   await prisma.orgMembership.upsert({
     where: { userId },
-    update: { tenantId, organizationId },
-    create: { tenantId, userId, organizationId },
+    update: { tenantId },
+    create: { tenantId, userId },
   });
 }
 
 /**
- * ¿Pueden contactarse dos usuarios? Regla: solo si comparten organización (o
- * ambos son Globales). Lo consulta el módulo de Synapse en cada invitación.
- * Un usuario sin registro de membresía se trata como Global.
+ * ¿Pueden contactarse dos usuarios? Regla: solo si pertenecen a la misma
+ * organización. Lo consulta el módulo de Synapse en cada invitación. Un usuario
+ * sin registro de membresía se trata como "sin organización" (null).
  */
 export async function mayContact(from: string, to: string): Promise<boolean> {
   if (from === to) return true;
@@ -46,47 +47,64 @@ export async function mayContact(from: string, to: string): Promise<boolean> {
     prisma.orgMembership.findUnique({ where: { userId: from } }),
     prisma.orgMembership.findUnique({ where: { userId: to } }),
   ]);
-  return (a?.organizationId ?? null) === (b?.organizationId ?? null);
+  return (a?.tenantId ?? null) === (b?.tenantId ?? null);
 }
 
-/** Deriva un código a partir de un nombre cuando el admin no da uno explícito. */
-function codeFromName(name: string): string {
-  const base = name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40);
-  return base || 'org';
+export interface JoinResult {
+  spaceId: string;
+  scope: 'general' | 'organization';
+  organization: { id: string; name: string; code: string | null };
 }
 
 /**
- * Asegura el Espacio "Global" del tenant. Idempotente: si ya está en el tenant
- * lo devuelve; si no, lo crea en Synapse y lo persiste.
+ * Une a un usuario a la organización que le corresponde según su código:
+ *   - código vacío  -> organización general (el `hostTenant`, resuelto por dominio).
+ *   - código válido  -> esa organización.
+ *   - código inválido -> error (no cae a la general; el usuario lo tecleó a propósito).
  */
-export async function ensureGlobalSpace(tenant: PrismaTenant): Promise<string> {
-  if (tenant.globalSpaceId) return tenant.globalSpaceId;
-  const spaceId = await createSpace(tenant.matrixBaseUrl, `${tenant.name} · Global`);
-  await prisma.tenant.update({ where: { id: tenant.id }, data: { globalSpaceId: spaceId } });
-  logger.info({ tenantId: tenant.id, spaceId }, 'Espacio Global creado');
-  return spaceId;
+export async function joinUserByCode(
+  hostTenant: PrismaTenant,
+  userId: string,
+  code?: string | null,
+): Promise<JoinResult> {
+  const trimmed = (code ?? '').trim();
+  let target = hostTenant;
+  let scope: 'general' | 'organization' = 'general';
+
+  if (trimmed) {
+    const org = await resolveTenantByCode(trimmed);
+    if (!org) {
+      const err = new Error('Código de organización no válido.') as Error & { code?: string };
+      err.code = 'INVALID_ORG_CODE';
+      throw err;
+    }
+    target = org;
+    scope = 'organization';
+  }
+
+  const spaceId = await ensureTenantSpace(target);
+  await forceJoinRoom(target.matrixBaseUrl, spaceId, userId);
+  await recordMembership(target.id, userId);
+  return {
+    spaceId,
+    scope,
+    organization: { id: target.id, name: target.name, code: target.code },
+  };
 }
 
 /**
- * Une a TODOS los usuarios existentes del homeserver al Espacio Global. Se usa
- * al activar el multitenant (search_all_users:false) para que las cuentas
- * creadas antes sigan pudiéndose descubrir entre sí. Idempotente y tolerante a
- * fallos por usuario (deactivados, etc.). No toca a quienes ya están en una org.
+ * Une a TODOS los usuarios existentes del homeserver a la organización general
+ * (este tenant) y registra su membresía. Se usa al activar el multitenant para
+ * que las cuentas creadas antes sigan pudiéndose descubrir. No pisa a quien ya
+ * tenga una membresía (p. ej. de otra organización).
  */
-export async function backfillGlobalSpace(
+export async function backfillTenant(
   tenant: PrismaTenant,
 ): Promise<{ spaceId: string; joined: number; total: number }> {
-  const spaceId = await ensureGlobalSpace(tenant);
+  const spaceId = await ensureTenantSpace(tenant);
   let from = 0;
   let joined = 0;
   let total = 0;
-  // Paginación simple del listado de usuarios de la Admin API.
   for (let page = 0; page < 1000; page++) {
     const { users, total: count } = await listUsers(tenant.matrixBaseUrl, { limit: 100, from });
     total = count;
@@ -95,144 +113,16 @@ export async function backfillGlobalSpace(
       if (u.deactivated) continue;
       try {
         await forceJoinRoom(tenant.matrixBaseUrl, spaceId, u.userId);
-        // No pisar a quien ya tiene org: solo marcar Global a los que no tengan
-        // registro de membresía todavía (usuarios previos al multitenant).
         const existing = await prisma.orgMembership.findUnique({ where: { userId: u.userId } });
-        if (!existing) await recordMembership(tenant.id, u.userId, null);
+        if (!existing) await recordMembership(tenant.id, u.userId);
         joined += 1;
       } catch (err) {
-        logger.warn({ err, userId: u.userId }, 'No se pudo unir usuario al Global (backfill)');
+        logger.warn({ err, userId: u.userId }, 'No se pudo unir usuario (backfill)');
       }
     }
     from += users.length;
     if (from >= total) break;
   }
-  logger.info({ tenantId: tenant.id, spaceId, joined, total }, 'Backfill del espacio Global');
+  logger.info({ tenantId: tenant.id, spaceId, joined, total }, 'Backfill de organización general');
   return { spaceId, joined, total };
-}
-
-export async function listOrganizations(tenantId: string): Promise<PrismaOrg[]> {
-  return prisma.organization.findMany({ where: { tenantId }, orderBy: { createdAt: 'asc' } });
-}
-
-/**
- * Crea una organización: genera/valida el código, crea su Espacio en Synapse y
- * lo persiste. Si el código ya existe en el tenant, lanza error.
- */
-export async function createOrganization(
-  tenant: PrismaTenant,
-  input: CreateOrganizationInput,
-  createdBy?: string,
-): Promise<PrismaOrg> {
-  // "Sin código": la organización representa el espacio general. Sus miembros
-  // (los que se registran sin código) se ven con todos los demás sin código.
-  if (input.requiresCode === false) {
-    const spaceId = await ensureGlobalSpace(tenant);
-    return prisma.organization.create({
-      data: { tenantId: tenant.id, name: input.name, code: null, spaceId, createdBy: createdBy ?? null },
-    });
-  }
-
-  // "Con código": organización aislada con su propio espacio.
-  const code = normalizeOrgCode(input.code ?? codeFromName(input.name));
-  const existing = await prisma.organization.findUnique({
-    where: { tenantId_code: { tenantId: tenant.id, code } },
-  });
-  if (existing) throw new Error(`Ya existe una organización con el código "${code}".`);
-
-  const spaceId = await createSpace(tenant.matrixBaseUrl, input.name);
-  return prisma.organization.create({
-    data: { tenantId: tenant.id, name: input.name, code, spaceId, createdBy: createdBy ?? null },
-  });
-}
-
-/**
- * Actualiza el nombre y/o el código de una organización. Al cambiar el código
- * NO se toca el Espacio ni sus miembros actuales: solo cambia qué texto deben
- * teclear los NUEVOS integrantes al registrarse. Valida unicidad del código.
- */
-export async function updateOrganization(
-  tenantId: string,
-  orgId: string,
-  input: UpdateOrganizationInput,
-): Promise<PrismaOrg> {
-  const org = await prisma.organization.findFirst({ where: { id: orgId, tenantId } });
-  if (!org) throw new Error('Organización no encontrada.');
-
-  const code = input.code !== undefined ? normalizeOrgCode(input.code) : undefined;
-  if (code && code !== org.code) {
-    const clash = await prisma.organization.findUnique({
-      where: { tenantId_code: { tenantId, code } },
-    });
-    if (clash) throw new Error(`Ya existe una organización con el código "${code}".`);
-  }
-
-  return prisma.organization.update({
-    where: { id: orgId },
-    data: {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(code !== undefined ? { code } : {}),
-    },
-  });
-}
-
-/**
- * Borra el registro de una organización de Whalabi. NO borra el Espacio Matrix
- * (sus miembros e historial siguen en Synapse); solo deja de ofrecer el código.
- */
-export async function deleteOrganization(tenantId: string, orgId: string): Promise<void> {
-  const org = await prisma.organization.findFirst({ where: { id: orgId, tenantId } });
-  if (!org) throw new Error('Organización no encontrada.');
-  await prisma.organization.delete({ where: { id: orgId } });
-}
-
-/** Resuelve una organización por su código dentro de un tenant. */
-export async function resolveOrgByCode(
-  tenantId: string,
-  code: string,
-): Promise<PrismaOrg | null> {
-  return prisma.organization.findUnique({
-    where: { tenantId_code: { tenantId, code: normalizeOrgCode(code) } },
-  });
-}
-
-export interface JoinResult {
-  spaceId: string;
-  scope: 'global' | 'organization';
-  organization?: { id: string; name: string; code: string };
-}
-
-/**
- * Une a un usuario al espacio que le corresponde según su código:
- *   - código vacío / ausente -> Espacio Global (se crea si hace falta).
- *   - código válido           -> Espacio de esa organización.
- *   - código inválido         -> error (no cae al Global; el usuario lo tecleó a propósito).
- */
-export async function joinUserToOrgSpace(
-  tenant: PrismaTenant,
-  userId: string,
-  code?: string | null,
-): Promise<JoinResult> {
-  const trimmed = (code ?? '').trim();
-
-  if (!trimmed) {
-    const spaceId = await ensureGlobalSpace(tenant);
-    await forceJoinRoom(tenant.matrixBaseUrl, spaceId, userId);
-    await recordMembership(tenant.id, userId, null);
-    return { spaceId, scope: 'global' };
-  }
-
-  const org = await resolveOrgByCode(tenant.id, trimmed);
-  if (!org) {
-    const err = new Error('Código de organización no válido.') as Error & { code?: string };
-    err.code = 'INVALID_ORG_CODE';
-    throw err;
-  }
-  await forceJoinRoom(tenant.matrixBaseUrl, org.spaceId, userId);
-  await recordMembership(tenant.id, userId, org.id);
-  return {
-    spaceId: org.spaceId,
-    scope: 'organization',
-    organization: { id: org.id, name: org.name, code: org.code ?? '' },
-  };
 }

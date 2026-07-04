@@ -1,122 +1,88 @@
-# Multi-tenant
+# Organizaciones (multitenant)
 
-Whalabi tiene **dos niveles** de multitenancy que se combinan:
+La **Organización** es la entidad de primer nivel de Whalabi (en el modelo es el
+`Tenant`). Reúne en un solo lugar su **personalidad** (nombre, marca, bot, LLM) y
+su **forma de acceso**:
 
-1. **Tenant por dominio** (branding/config): cada dominio resuelve un `Tenant`
-   con su logo, colores, bot y homeserver. Ver más abajo.
-2. **Organización por código** (aislamiento de personas dentro de un tenant):
-   modelo híbrido descrito en la siguiente sección.
+- **Con código (aislada)** → sus miembros se registran con el código y **solo se
+  ven entre ellos**; tiene su propio espacio Matrix.
+- **Sin código (general)** → sus miembros entran **sin** código al espacio
+  general y se ven con todos los demás sin código.
 
----
+Regla para el usuario final al registrarse:
 
-## Organizaciones por "código" (multitenant híbrido)
+- **No escribe código** → entra a la organización general (la resuelta por
+  dominio, normalmente **Whalabi**).
+- **Escribe un código válido** → entra **solo** a esa organización.
 
-Regla de producto:
+## Cómo se refuerza (no es cosmético)
 
-- **Sin código de organización** → el usuario entra al espacio **Global** y se
-  descubre/escribe con todos (estilo WhatsApp).
-- **Con código de organización** → el usuario queda **acotado a esa organización**:
-  solo ve y busca a sus integrantes; nadie de fuera lo encuentra.
+1. **Descubrimiento.** En Synapse `user_directory.search_all_users: false`: solo
+   encuentras a quien **comparte un espacio** contigo. Whalabi une a cada quien al
+   espacio de su organización (force-join vía Admin API).
+2. **Contacto (direccionabilidad).** Aunque alguien conozca un MXID exacto de otra
+   organización, un **módulo de Synapse** (`whalabi_isolation.py`) intercepta cada
+   invitación (`user_may_invite`) y la permite **solo si ambos comparten
+   organización**. Consulta a la API interna:
 
-### Cómo se refuerza (no es cosmético)
+   ```
+   Synapse (módulo) ──GET /api/internal/may-contact?from=&to=──▶ API Whalabi
+                                                                    │
+                                             índice OrgMembership ◀─┘
+   ```
 
-En Synapse se fija `user_directory.search_all_users: false`. Con eso, un usuario
-solo puede descubrir a personas con las que **comparte un espacio**. Whalabi une
-a cada quien al espacio correcto según su registro:
+Ambas capas usan el índice **`OrgMembership`** (MXID → organización/tenant), que
+se registra al unirse y en el backfill.
 
-| Registro | Espacio al que se une | A quién puede descubrir |
-|----------|-----------------------|--------------------------|
-| sin código | Espacio **Global** del tenant | a todos los del Global |
-| con código válido | Espacio de esa **organización** | solo a su organización |
+## Piezas
 
-Los espacios son privados y no listados: sus miembros no aparecen en el
-directorio global. El aislamiento lo impone Synapse, no la app.
-
-### Piezas
-
-- **Modelo `Organization`** (Prisma): `{ tenantId, name, code, spaceId }`. El
-  código es único por tenant y se normaliza a minúsculas.
-- **`Tenant.globalSpaceId`**: Espacio Global del tenant (se crea al vuelo).
+- **`Tenant`** (Prisma) = la organización. Campos nuevos: `code` (null = general,
+  único cuando existe) y `spaceId` (su espacio Matrix, se crea al primer ingreso).
+  `publicDomain` es opcional (por ahora se distingue por código, no por dominio).
+- **`OrgMembership`**: `{ userId (MXID, único), tenantId }`.
 - **API**
-  - `GET  /api/org/check?code=` — valida un código **antes** de registrar
-    (evita cuentas huérfanas). Devuelve `{ valid, name? }`.
+  - `GET  /api/org/check?code=` — valida un código **antes** de registrar. `{ valid, name? }`.
   - `POST /api/org/join` — `Authorization: Bearer <access token Matrix>` + `{ code? }`.
-    La API confirma la identidad con `whoami`, resuelve el espacio y hace
-    **force-join** vía la Synapse Admin API. Código vacío → Global.
-  - `GET/POST /api/admin/tenants/:id/orgs` — listar/crear organizaciones (admin).
-  - `POST /api/admin/tenants/:id/global/backfill` — une a los usuarios ya
-    existentes al Global (usar **una vez** al activar el multitenant).
-- **Web**: campo *Código de organización* (opcional) en el registro; el provider
-  llama a `/api/org/join` tras crear la cuenta; panel admin para gestionar
-  códigos dentro de cada tenant.
+    Confirma identidad con `whoami`, resuelve la organización y hace force-join.
+  - `GET  /api/internal/may-contact` — usado por el módulo de Synapse (secreto).
+  - `POST /api/admin/tenants` / `PATCH …/:id` — crear/editar organización.
+  - `POST /api/admin/tenants/:id/backfill` — une usuarios existentes a esta org.
+- **Web**: una sola pestaña **Organizaciones** en el admin (personalidad +
+  con/sin código); campo *Código de organización* (opcional) en el registro.
 
-### Alta de una organización
+## Alta de una organización
 
-1. En el panel admin, entra a la sección **Organizaciones** (nivel superior).
-2. Crea la organización con un nombre y elige:
-   - **Con código (aislada)**: se genera/defines un código; se crea su Espacio
-     Matrix aislado. Sus miembros se registran con el código y solo se ven entre
-     ellos.
-   - **Sin código (general)**: sus miembros entran sin código al espacio general
-     y se ven con todos los demás "sin código" (hay un solo espacio general).
+1. Panel admin → **Organizaciones** → **+ Nueva**.
+2. Pon el **nombre** y su personalidad (marca, bot, LLM), y elige el **acceso**:
+   con código (aislada) o sin código (general).
 3. Comparte el código (si aplica) con sus integrantes.
 
-> Nota de nomenclatura: en el panel, **Organizaciones** son los grupos que crea
-> el admin (con/sin código). **Sitio** es la configuración a nivel de dominio
-> (marca, bot, LLM); en una instalación de un solo dominio casi no se toca.
-> Técnicamente muchas organizaciones conviven en el mismo dominio gracias al
-> **código** (no al dominio).
+## Variables de entorno del aislamiento
 
-### Bloqueo de contacto cruzado (refuerzo en el servidor)
-
-`search_all_users:false` evita que te **descubran** de otra organización, pero
-quien conociera un MXID exacto (`@juan:whalabi.app`) podría invitarlo/DM aunque
-no compartan espacio. Para cerrarlo, un **módulo de Synapse**
-(`infra/synapse-config/whalabi_isolation.py`) intercepta cada invitación
-(`user_may_invite`) y la permite **solo si ambos comparten organización** (o
-ambos son Globales). La decisión la toma consultando la API interna:
-
-```
-Synapse (módulo) ──GET /api/internal/may-contact?from=&to=──▶ API Whalabi
-                                                                 │
-                                          índice OrgMembership ◀─┘
-```
-
-- **`OrgMembership`** (Prisma): a qué organización pertenece cada MXID
-  (`organizationId` null = Global). Se registra al unirse y en el backfill.
-- **`INTERNAL_API_SECRET`**: secreto compartido (cabecera `x-internal-secret`).
-  Vacío = bloqueo por servidor deshabilitado (el descubrimiento acotado sigue).
+- **`INTERNAL_API_SECRET`**: secreto compartido con el módulo (cabecera
+  `x-internal-secret`). Vacío = bloqueo por servidor deshabilitado.
 - **`ISOLATION_EXEMPT_USERS`**: MXIDs que nunca se bloquean (bot, soporte).
-- **`fail_open: true`**: si la API no responde, la invitación se permite (para no
-  romper la mensajería); ponlo en `false` para máxima privacidad.
+- **`fail_open: true`** (config del módulo): si la API no responde, la invitación
+  se permite; ponlo en `false` para máxima privacidad.
 
-Requiere `PYTHONPATH=/data` en el contenedor de Synapse (ya en el compose) y que
-`init-synapse.sh` copie el módulo al volumen (ya lo hace). Tras cambiar el
-template, regenera y reinicia Synapse.
+Requiere `PYTHONPATH=/data` en el contenedor de Synapse (ya en el compose) e
+`init-synapse.sh` copia el módulo al volumen.
 
-### Rollout en un servidor con usuarios existentes
+## Rollout en un servidor con usuarios existentes
 
 Al activar `search_all_users: false`, las cuentas creadas antes no están en
-ningún espacio y dejarían de descubrirse. Pulsa **"Unir usuarios existentes al
-espacio Global"** (o `POST /api/admin/tenants/:id/global/backfill`) una vez.
+ningún espacio. En la organización **general** (Whalabi), pulsa **"Unir usuarios
+existentes a esta organización"** (o `POST /api/admin/tenants/:id/backfill`) una vez.
 
 ---
 
-## Tenant por dominio
+## Dominio propio por organización (más adelante)
 
-Whalabi resuelve el tenant a partir del **dominio** desde el que se accede:
+Hoy todas las organizaciones conviven en **un solo dominio** (whalabi.app) y se
+distinguen por **código**. El campo `publicDomain` queda para el futuro: darle a
+cada organización su propio subdominio (`acme.whalabi.app`) con aislamiento total.
 
-```
-dominio visitante  →  tenant resolver  →  configuración Matrix del tenant
-```
-
-Ejemplos:
-
-| Dominio | Tenant |
-|---------|--------|
-| `chat.clinica-demo.mx` | `clinica-demo` |
-| `chat.despacho-demo.com` | `despacho-demo` |
-| `whalabi.app` / `localhost` | `default` |
+### Resolución por dominio (general / pre-login)
 
 ## Resolución
 

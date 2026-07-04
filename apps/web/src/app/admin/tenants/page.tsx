@@ -29,14 +29,14 @@ export default function TenantsPage() {
       <div className="w-64 shrink-0">
         <div className="mb-3 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-            Sitio
+            Organizaciones
           </h1>
           <button
             type="button"
             onClick={() => setSelected(emptyTenant())}
             className="text-sm font-medium text-brand hover:underline"
           >
-            + Nuevo
+            + Nueva
           </button>
         </div>
         {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
@@ -53,7 +53,9 @@ export default function TenantsPage() {
               }`}
             >
               <span className="font-medium">{t.name}</span>
-              <span className="block text-xs text-slate-400">{t.slug}</span>
+              <span className="block text-xs text-slate-400">
+                {t.code ? `código: ${t.code}` : 'general · sin código'}
+              </span>
             </button>
           ))}
         </div>
@@ -63,7 +65,7 @@ export default function TenantsPage() {
         {selected ? (
           <TenantForm tenant={selected} onSaved={load} onCancel={() => setSelected(null)} />
         ) : (
-          <p className="text-sm text-slate-400">Selecciona o crea un dominio.</p>
+          <p className="text-sm text-slate-400">Selecciona o crea una organización.</p>
         )}
       </div>
     </div>
@@ -75,7 +77,9 @@ function emptyTenant(): Tenant {
     id: '',
     name: '',
     slug: '',
-    publicDomain: '',
+    publicDomain: null,
+    code: null,
+    spaceId: null,
     matrixBaseUrl: '',
     matrixServerName: '',
     botUserId: null,
@@ -105,6 +109,8 @@ function TenantForm({
 }) {
   const isNew = !tenant.id;
   const [form, setForm] = useState(tenant);
+  const [requiresCode, setRequiresCode] = useState(tenant.code !== null);
+  const [code, setCode] = useState(tenant.code ?? '');
   const [apiKey, setApiKey] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [testPrompt, setTestPrompt] = useState('Hola, ¿qué eres?');
@@ -113,6 +119,8 @@ function TenantForm({
 
   useEffect(() => {
     setForm(tenant);
+    setRequiresCode(tenant.code !== null);
+    setCode(tenant.code ?? '');
     setApiKey('');
     setMsg(null);
     setTestOut(null);
@@ -128,12 +136,26 @@ function TenantForm({
   async function save() {
     setSaving(true);
     setMsg(null);
+    // slug automático desde el nombre si es nueva y no se puso uno.
+    const slug =
+      form.slug.trim() ||
+      form.name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 40);
     const body: Record<string, unknown> = {
       name: form.name,
-      slug: form.slug,
-      publicDomain: form.publicDomain,
-      matrixBaseUrl: form.matrixBaseUrl,
-      matrixServerName: form.matrixServerName,
+      slug,
+      requiresCode,
+      // Con código: manda el código (o vacío para autogenerar). Sin código: se ignora.
+      ...(requiresCode ? { code: code.trim() || undefined } : {}),
+      publicDomain: form.publicDomain || null,
+      // Matrix opcional: si va vacío, el servidor usa el homeserver del despliegue.
+      ...(form.matrixBaseUrl ? { matrixBaseUrl: form.matrixBaseUrl } : {}),
+      ...(form.matrixServerName ? { matrixServerName: form.matrixServerName } : {}),
       botUserId: form.botUserId,
       botEnabled: form.botEnabled,
       botSystemPrompt: form.botSystemPrompt,
@@ -180,7 +202,7 @@ function TenantForm({
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">
-          {isNew ? 'Nuevo dominio' : form.name}
+          {isNew ? 'Nueva organización' : form.name}
         </h2>
         <button type="button" onClick={onCancel} className="text-sm text-slate-400 hover:underline">
           Cerrar
@@ -188,15 +210,52 @@ function TenantForm({
       </div>
 
       <Section title="Identidad">
-        <Field label="Nombre"><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} /></Field>
-        <Field label="Slug"><input className="input" value={form.slug} onChange={(e) => set('slug', e.target.value)} /></Field>
-        <Field label="Dominio público"><input className="input" value={form.publicDomain} onChange={(e) => set('publicDomain', e.target.value)} /></Field>
-        <Field label="Matrix base URL"><input className="input" value={form.matrixBaseUrl} onChange={(e) => set('matrixBaseUrl', e.target.value)} /></Field>
-        <Field label="Matrix server name"><input className="input" value={form.matrixServerName} onChange={(e) => set('matrixServerName', e.target.value)} /></Field>
+        <Field label="Nombre"><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Clínica San Rafael" /></Field>
         <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <input type="checkbox" checked={form.allowRegistration} onChange={(e) => set('allowRegistration', e.target.checked)} />
           Permitir registro abierto
         </label>
+      </Section>
+
+      <Section title="Acceso">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setRequiresCode(true)}
+            className={`rounded-lg border p-3 text-left text-sm transition ${
+              requiresCode
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            <span className="block font-medium">Con código (aislada)</span>
+            <span className="block text-xs opacity-80">Se registran con el código y solo se ven entre ellos.</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setRequiresCode(false)}
+            className={`rounded-lg border p-3 text-left text-sm transition ${
+              !requiresCode
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            <span className="block font-medium">Sin código (general)</span>
+            <span className="block text-xs opacity-80">Entran sin código al espacio general; se ven con todos.</span>
+          </button>
+        </div>
+        {requiresCode && (
+          <Field label="Código (opcional; se genera del nombre)">
+            <input className="input font-mono" value={code} onChange={(e) => setCode(e.target.value)} autoCapitalize="none" placeholder="clinica" />
+          </Field>
+        )}
+      </Section>
+
+      <Section title="Avanzado (opcional)">
+        <Field label="Slug (id interno; se genera del nombre)"><input className="input" value={form.slug} onChange={(e) => set('slug', e.target.value)} /></Field>
+        <Field label="Dominio propio (para subdominio futuro)"><input className="input" value={form.publicDomain ?? ''} onChange={(e) => set('publicDomain', e.target.value)} placeholder="(vacío)" /></Field>
+        <Field label="Matrix base URL (vacío = homeserver del despliegue)"><input className="input" value={form.matrixBaseUrl} onChange={(e) => set('matrixBaseUrl', e.target.value)} placeholder="(por defecto)" /></Field>
+        <Field label="Matrix server name (vacío = por defecto)"><input className="input" value={form.matrixServerName} onChange={(e) => set('matrixServerName', e.target.value)} placeholder="(por defecto)" /></Field>
       </Section>
 
       <Section title="Branding">
@@ -240,6 +299,33 @@ function TenantForm({
             <button type="button" onClick={testBot} className="btn-primary shrink-0 text-sm">Probar</button>
           </div>
           {testOut && <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">{testOut}</p>}
+        </Section>
+      )}
+
+      {!isNew && !requiresCode && (
+        <Section title="Usuarios existentes">
+          <p className="text-xs text-slate-400">
+            Une a las cuentas ya creadas a esta organización general. Úsalo una vez
+            al activar el multitenant para que se sigan descubriendo entre sí.
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              setMsg(null);
+              try {
+                const r = await adminFetch<{ joined: number; total: number }>(
+                  `/api/admin/tenants/${tenant.id}/backfill`,
+                  { method: 'POST' },
+                );
+                setMsg(`Unidos ${r.joined}/${r.total} usuarios ✓`);
+              } catch (e) {
+                setMsg(e instanceof Error ? e.message : 'Error');
+              }
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Unir usuarios existentes a esta organización
+          </button>
         </Section>
       )}
 

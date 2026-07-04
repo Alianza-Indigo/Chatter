@@ -11,7 +11,7 @@ import { authRoutes } from './routes/auth.js';
 import { pushRoutes } from './routes/push.js';
 import { userRoutes } from './routes/users.js';
 import { invitationAdminRoutes, invitationPublicRoutes } from './routes/invitations.js';
-import { orgAdminRoutes, orgPublicRoutes } from './routes/org.js';
+import { orgPublicRoutes } from './routes/org.js';
 import { internalRoutes } from './routes/internal.js';
 import { observabilityRoutes } from './routes/observability.js';
 
@@ -52,7 +52,6 @@ export async function buildServer() {
   await app.register(adminRoutes);
   await app.register(userRoutes);
   await app.register(invitationAdminRoutes);
-  await app.register(orgAdminRoutes);
   await app.register(observabilityRoutes);
 
   return app;

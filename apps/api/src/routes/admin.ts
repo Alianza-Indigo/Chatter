@@ -15,6 +15,7 @@ import {
 } from '../services/tenant.js';
 import { testTenantBot } from '../services/llm-test.js';
 import { sendToUser } from '../services/push.js';
+import { backfillTenant } from '../services/org.js';
 import { toTenant } from '../mappers.js';
 
 /**
@@ -65,8 +66,31 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
     const existing = await getTenantById(id);
     if (!existing) return reply.code(404).send({ error: 'tenant_not_found' });
-    const tenant = await updateTenant(id, parsed.data);
-    return reply.send(toTenant(tenant));
+    try {
+      const tenant = await updateTenant(id, parsed.data);
+      return reply.send(toTenant(tenant));
+    } catch (err) {
+      return reply.code(409).send({
+        error: 'conflict',
+        message: err instanceof Error ? err.message : 'No se pudo actualizar la organización',
+      });
+    }
+  });
+
+  // Une a los usuarios existentes a esta organización (rollout del multitenant).
+  app.post('/api/admin/tenants/:id/backfill', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const tenant = await getTenantById(id);
+    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
+    try {
+      const result = await backfillTenant(tenant);
+      return reply.send(result);
+    } catch (err) {
+      return reply.code(502).send({
+        error: 'backfill_failed',
+        message: err instanceof Error ? err.message : 'No se pudo hacer el backfill.',
+      });
+    }
   });
 
   app.get('/api/admin/bot/logs', async (req, reply) => {

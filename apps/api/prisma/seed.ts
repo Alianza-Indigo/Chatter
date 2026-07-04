@@ -1,6 +1,8 @@
 /**
- * Seed de desarrollo: crea el tenant `default` y dos tenants demo.
+ * Seed de desarrollo: crea la organización general "Whalabi" (sin código).
  * Ejecutar con: pnpm db:seed
+ *
+ * Las demás organizaciones se crean desde el panel admin (con o sin código).
  */
 import { PrismaClient } from '@prisma/client';
 
@@ -16,7 +18,9 @@ async function main(): Promise<void> {
     create: {
       name: 'Whalabi',
       slug: 'default',
+      // Organización general: sin código y accesible por el dominio principal.
       publicDomain: 'localhost',
+      code: null,
       matrixBaseUrl: homeserver,
       matrixServerName: serverName,
       botEnabled: true,
@@ -29,53 +33,8 @@ async function main(): Promise<void> {
     },
   });
 
-  await prisma.tenant.upsert({
-    where: { slug: 'clinica-demo' },
-    update: {},
-    create: {
-      name: 'Clínica Demo',
-      slug: 'clinica-demo',
-      publicDomain: 'chat.clinica-demo.mx',
-      matrixBaseUrl: homeserver,
-      // server_name propio (no compartir con el tenant default para que el bot
-      // pueda distinguir el tenant por el homeserver del room).
-      matrixServerName: 'clinica-demo.mx',
-      botEnabled: true,
-      botUserId: `@whalabi-bot:${serverName}`,
-      botResponseMode: 'mention',
-      botSystemPrompt:
-        'Eres el asistente interno de Clínica Demo. Ayuda con dudas administrativas. ' +
-        'No des consejo médico. No inventes políticas. Si no sabes algo, dilo.',
-      llmProvider: 'dummy',
-      llmModel: 'gpt-4o-mini',
-      primaryColor: '#0ea5e9',
-      accentColor: '#a78bfa',
-      allowRegistration: false,
-      tagline: 'Comunicación interna de la clínica.',
-    },
-  });
-
-  await prisma.tenant.upsert({
-    where: { slug: 'despacho-demo' },
-    update: {},
-    create: {
-      name: 'Despacho Demo',
-      slug: 'despacho-demo',
-      publicDomain: 'chat.despacho-demo.com',
-      matrixBaseUrl: homeserver,
-      matrixServerName: 'despacho-demo.com',
-      botEnabled: false,
-      botResponseMode: 'mention',
-      llmProvider: 'dummy',
-      allowRegistration: false,
-      primaryColor: '#4338ca',
-      accentColor: '#a78bfa',
-      tagline: 'Comunicación legal privada.',
-    },
-  });
-
   // eslint-disable-next-line no-console
-  console.log('Seed completado: default, clinica-demo, despacho-demo');
+  console.log('Seed completado: organización general "Whalabi" (sin código).');
 }
 
 main()
