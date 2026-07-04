@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Tenant } from '@whalabi/shared';
+import type { Organization, Tenant } from '@whalabi/shared';
 import { adminFetch } from '@/lib/admin';
 
 export default function TenantsPage() {
@@ -233,6 +233,8 @@ function TenantForm({
         <Field label="API key (BYOK, se cifra)"><input type="password" className="input" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={isNew ? '' : '•••••• (dejar vacío para no cambiar)'} /></Field>
       </Section>
 
+      {!isNew && <OrgCodesSection tenantId={tenant.id} />}
+
       {!isNew && (
         <Section title="Probar bot">
           <div className="flex gap-2">
@@ -250,6 +252,123 @@ function TenantForm({
         {msg && <span className="text-sm text-slate-500">{msg}</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * Gestión de códigos de organización de un tenant. Cada código crea un Espacio
+ * Matrix aislado: quien se registra con él solo se descubre con su organización.
+ * Sin código, el usuario entra al espacio Global (todos entre sí).
+ */
+function OrgCodesSection({ tenantId }: { tenantId: string }) {
+  const [orgs, setOrgs] = useState<Organization[]>([]);
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    try {
+      setOrgs(await adminFetch<Organization[]>(`/api/admin/tenants/${tenantId}/orgs`));
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
+
+  async function create() {
+    if (!name.trim()) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await adminFetch(`/api/admin/tenants/${tenantId}/orgs`, {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim(), code: code.trim() || undefined }),
+      });
+      setName('');
+      setCode('');
+      setMsg('Organización creada ✓');
+      await load();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section title="Organizaciones (códigos)">
+      <p className="text-xs text-slate-400">
+        Al crear una organización se genera su Espacio Matrix aislado. Comparte el
+        código con sus integrantes: quien lo use al registrarse solo verá a su
+        organización. Sin código, el usuario entra al espacio general.
+      </p>
+
+      {orgs.length > 0 ? (
+        <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+          {orgs.map((o) => (
+            <div key={o.id} className="flex items-center justify-between px-3 py-2 text-sm">
+              <div>
+                <span className="font-medium text-slate-700 dark:text-slate-200">{o.name}</span>
+                <span className="ml-2 rounded bg-brand/10 px-2 py-0.5 font-mono text-xs text-brand">
+                  {o.code}
+                </span>
+              </div>
+              <span className="font-mono text-[11px] text-slate-400" title={o.spaceId}>
+                {o.spaceId.slice(0, 14)}…
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-400">Aún no hay organizaciones con código.</p>
+      )}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex-1">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Nombre</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Clínica San Rafael" />
+        </label>
+        <label className="flex-1">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Código (opcional)</span>
+          <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="se genera del nombre" autoCapitalize="none" />
+        </label>
+        <button type="button" onClick={create} disabled={busy || !name.trim()} className="btn-primary shrink-0 text-sm">
+          {busy ? 'Creando…' : 'Crear'}
+        </button>
+      </div>
+      <div className="flex items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={async () => {
+            setBusy(true);
+            setMsg(null);
+            try {
+              const r = await adminFetch<{ joined: number; total: number }>(
+                `/api/admin/tenants/${tenantId}/global/backfill`,
+                { method: 'POST' },
+              );
+              setMsg(`Unidos ${r.joined}/${r.total} usuarios al espacio Global ✓`);
+            } catch (e) {
+              setMsg(e instanceof Error ? e.message : 'Error');
+            } finally {
+              setBusy(false);
+            }
+          }}
+          disabled={busy}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          Unir usuarios existentes al espacio Global
+        </button>
+        <span className="text-xs text-slate-400">Úsalo una vez al activar el multitenant.</span>
+      </div>
+
+      {msg && <span className="text-sm text-slate-500">{msg}</span>}
+    </Section>
   );
 }
 

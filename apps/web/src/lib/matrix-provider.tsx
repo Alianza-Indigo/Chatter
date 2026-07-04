@@ -20,6 +20,7 @@ import type {
   WhalabiSession,
 } from '@whalabi/matrix';
 import { clearSession, loadSession, saveSession } from './session';
+import { joinOrgSpace } from './api';
 import { config } from './config';
 
 interface MatrixContextValue {
@@ -34,6 +35,8 @@ interface MatrixContextValue {
     password: string;
     registrationToken?: string;
     captchaResponse?: string;
+    /** Código de organización (vacío = espacio Global). */
+    orgCode?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
   sendMessage: (roomId: string, body: string, replyTo?: string) => Promise<void>;
@@ -122,8 +125,12 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback<MatrixContextValue['register']>(
-    async (params) => {
+    async ({ orgCode, ...params }) => {
       const s = await client.register(params);
+      // Multitenant híbrido: unir al usuario a su espacio (Global o el de su
+      // organización) usando su propio access token recién emitido. Debe ocurrir
+      // antes de arrancar el sync para que el espacio aparezca desde el inicio.
+      await joinOrgSpace(s.accessToken, orgCode);
       saveSession(s);
       client.restore(s);
       await client.startSync();

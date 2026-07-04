@@ -67,6 +67,34 @@ export const botLogsQuerySchema = z.object({
     .optional(),
 });
 
+/**
+ * Código de organización que el usuario introduce al registrarse. Amigable de
+ * teclear: letras, números, guiones y guiones bajos; sin espacios. Se compara
+ * sin distinguir mayúsculas (se normaliza a minúsculas al guardar y resolver).
+ */
+export const orgCodeSchema = z
+  .string()
+  .trim()
+  .min(3, 'El código es muy corto')
+  .max(48)
+  .regex(/^[a-zA-Z0-9_-]+$/, 'Solo letras, números, guiones y guiones bajos');
+
+/** Cuerpo para crear una organización (panel admin). */
+export const createOrganizationSchema = z.object({
+  name: z.string().min(2).max(120),
+  /** Si se omite, la API genera un código a partir del nombre. */
+  code: orgCodeSchema.optional(),
+});
+
+/**
+ * Cuerpo para unir al usuario recién registrado a su espacio.
+ * El usuario se autentica con su propio access token de Matrix (Authorization:
+ * Bearer), no aquí; este cuerpo solo trae el código (vacío = espacio Global).
+ */
+export const joinOrgSchema = z.object({
+  code: z.string().trim().max(48).optional().nullable(),
+});
+
 /** Suscripción Web Push enviada por el frontend. */
 export const pushSubscriptionSchema = z.object({
   userId: z.string().min(1),
@@ -84,6 +112,8 @@ export const pushUnsubscribeSchema = z.object({
 });
 
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
+export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
+export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 export type PushSubscriptionInput = z.infer<typeof pushSubscriptionSchema>;
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
 export type BotTestInput = z.infer<typeof botTestSchema>;

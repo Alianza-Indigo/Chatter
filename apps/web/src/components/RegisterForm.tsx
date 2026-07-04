@@ -7,6 +7,7 @@ import { useMatrix } from '@/lib/matrix-provider';
 import { useTenant } from '@/lib/tenant-provider';
 import { useTheme } from '@/lib/theme-provider';
 import { config } from '@/lib/config';
+import { checkOrgCode } from '@/lib/api';
 import { TenantBrand } from './TenantBrand';
 import { Recaptcha } from './Recaptcha';
 
@@ -19,6 +20,7 @@ export function RegisterForm() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [orgCode, setOrgCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,11 +63,22 @@ export function RegisterForm() {
 
     setLoading(true);
     try {
+      // Validar el código ANTES de crear la cuenta (evita cuentas huérfanas).
+      const code = orgCode.trim();
+      if (code) {
+        const check = await checkOrgCode(code);
+        if (!check.valid) {
+          setError('El código de organización no es válido. Revísalo o déjalo vacío.');
+          setLoading(false);
+          return;
+        }
+      }
       await register({
         homeserverUrl: homeserver,
         username: username.trim(),
         password,
         captchaResponse: captcha ?? undefined,
+        orgCode: code || undefined,
       });
       router.push('/chat');
     } catch (err) {
@@ -161,6 +174,25 @@ export function RegisterForm() {
               Las contraseñas no coinciden.
             </span>
           )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Código de organización{' '}
+            <span className="font-normal text-slate-400">(opcional)</span>
+          </span>
+          <input
+            value={orgCode}
+            onChange={(e) => setOrgCode(e.target.value)}
+            className="input"
+            placeholder="Déjalo vacío para el chat general"
+            autoCapitalize="none"
+            autoComplete="off"
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Si tu organización te dio un código, escríbelo para unirte solo a ella.
+            Sin código entrarás al espacio general.
+          </p>
         </label>
 
         {siteKey && (

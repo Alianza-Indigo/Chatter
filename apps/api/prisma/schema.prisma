@@ -81,16 +81,43 @@ model Tenant {
   // Registro
   allowRegistration Boolean        @default(false)
 
+  /// Espacio Matrix "Global" del tenant. Los usuarios que se registran SIN
+  /// código de organización se unen aquí y se descubren entre sí. Se crea la
+  /// primera vez que se necesita (ensureGlobalSpace).
+  globalSpaceId    String?
+
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
   botLogs          BotLog[]
   pushSubscriptions PushSubscription[]
   invitations      Invitation[]
+  organizations    Organization[]
   auditLogs        AuditLog[]
 
   @@index([publicDomain])
   @@index([slug])
+}
+
+/// Organización dentro de un tenant (multitenant híbrido por "código").
+/// Cada organización es un Espacio Matrix privado: quien se registra con el
+/// `code` se une solo a ese espacio y, con search_all_users:false en Synapse,
+/// solo puede descubrir a los demás miembros de su organización.
+model Organization {
+  id        String   @id @default(cuid())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  name      String
+  /// Código que el usuario introduce al registrarse (único por tenant).
+  code      String
+  /// Espacio Matrix (!roomid:server) al que se une a los miembros de la org.
+  spaceId   String
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
 }
 
 /// Log operativo del bot. No guarda contenido salvo BOT_STORE_CONTENT=true.

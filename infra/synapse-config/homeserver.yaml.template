@@ -57,13 +57,17 @@ registration_shared_secret: "${MATRIX_REGISTRATION_SHARED_SECRET}"
 federation_domain_whitelist: []
 # Para abrir federación, eliminar la whitelist vacía anterior.
 
-# --- Directorio de usuarios (estilo "contactos" de WhatsApp) ---
-# Permite que cualquier usuario encuentre a cualquier otro por nombre/usuario y
-# le escriba directo, sin necesidad de compartir un room antes. Sin esto, Synapse
-# solo muestra a personas con las que ya compartes una conversación.
+# --- Directorio de usuarios (multitenant híbrido por código de organización) ---
+# search_all_users: false es CLAVE para el aislamiento entre organizaciones.
+# Con false, un usuario solo encuentra a personas con las que COMPARTE un espacio.
+# Whalabi une automáticamente a cada quien a un espacio según su registro:
+#   - sin código de organización -> Espacio "Global" (todos se encuentran entre sí)
+#   - con código de organización  -> Espacio de esa org (solo se ven entre ellos)
+# Así el descubrimiento estilo WhatsApp sigue funcionando dentro de cada grupo,
+# pero nadie cruza de una organización a otra. Lo impone Synapse, no la app.
 user_directory:
   enabled: true
-  search_all_users: true
+  search_all_users: false
   prefer_local_users: true
 
 # --- Llamadas (WebRTC / VoIP) ---

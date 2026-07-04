@@ -166,6 +166,58 @@ export async function deactivateUser(baseUrl: string, userId: string): Promise<v
   });
 }
 
+/**
+ * Crea un Espacio Matrix (m.space) privado y no listado, propiedad del usuario
+ * admin. Se usa para las organizaciones y el espacio Global del multitenant.
+ * Al ser privado (visibility: private) sus miembros NO aparecen en el directorio
+ * global; con search_all_users:false solo se descubren entre sí.
+ */
+export async function createSpace(
+  baseUrl: string,
+  name: string,
+): Promise<string> {
+  const data = (await adminFetch(baseUrl, `/_matrix/client/v3/createRoom`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      preset: 'private_chat',
+      visibility: 'private',
+      creation_content: { type: 'm.space' },
+    }),
+  })) as { room_id: string };
+  return data.room_id;
+}
+
+/**
+ * Resuelve el MXID dueño de un access token (Client-Server whoami). Se usa para
+ * confirmar la identidad del usuario que pide unirse a un espacio, sin confiar
+ * en un userId que venga del cuerpo de la petición.
+ */
+export async function whoami(baseUrl: string, accessToken: string): Promise<string | null> {
+  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/_matrix/client/v3/account/whoami`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { user_id?: string };
+  return data.user_id ?? null;
+}
+
+/**
+ * Une (fuerza) a un usuario a un room y propaga el error si falla. Se usa en el
+ * onboarding a organizaciones, donde un fallo significa que el usuario quedaría
+ * sin poder descubrir a su grupo y hay que avisarlo.
+ */
+export async function forceJoinRoom(
+  baseUrl: string,
+  roomIdOrAlias: string,
+  userId: string,
+): Promise<void> {
+  await adminFetch(baseUrl, `/_synapse/admin/v1/join/${encodeURIComponent(roomIdOrAlias)}`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId }),
+  });
+}
+
 /** Une (fuerza) a un usuario a un room. Útil para asignar rooms al invitar. */
 export async function joinUserToRoom(
   baseUrl: string,

@@ -81,6 +81,21 @@ export interface PublicTenantConfig {
   branding: TenantBranding;
 }
 
+/**
+ * Organización dentro de un tenant (multitenant híbrido por "código").
+ * Cada organización es un Espacio Matrix privado; quien se registra con el
+ * `code` queda acotado a esa organización.
+ */
+export interface Organization {
+  id: string;
+  tenantId: string;
+  name: string;
+  code: string;
+  spaceId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Entrada de log operativo del bot. Nunca guarda contenido salvo opt-in. */
 export interface BotLog {
   id: string;
