@@ -256,6 +256,124 @@ function TenantForm({
 }
 
 /**
+ * Fila editable de una organización: permite renombrar, cambiar el código,
+ * copiarlo y borrar la organización. Cambiar el código no afecta a los miembros
+ * actuales; solo cambia lo que teclean los nuevos al registrarse.
+ */
+function OrgRow({
+  tenantId,
+  org,
+  onChanged,
+}: {
+  tenantId: string;
+  org: Organization;
+  onChanged: () => void;
+}) {
+  const [name, setName] = useState(org.name);
+  const [code, setCode] = useState(org.code);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(org.name);
+    setCode(org.code);
+  }, [org.name, org.code]);
+
+  const dirty = name.trim() !== org.name || code.trim() !== org.code;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(org.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard no disponible */
+    }
+  }
+
+  async function save() {
+    if (!dirty || !name.trim() || !code.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminFetch(`/api/admin/tenants/${tenantId}/orgs/${org.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: name.trim(), code: code.trim() }),
+      });
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm(`¿Borrar la organización "${org.name}"? El código dejará de funcionar. El espacio y sus miembros permanecen en Matrix.`)) {
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminFetch(`/api/admin/tenants/${tenantId}/orgs/${org.id}`, { method: 'DELETE' });
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="min-w-32 flex-1">
+          <span className="mb-1 block text-[11px] font-medium text-slate-400">Nombre</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="min-w-32 flex-1">
+          <span className="mb-1 block text-[11px] font-medium text-slate-400">Código</span>
+          <div className="flex gap-1">
+            <input
+              className="input font-mono"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoCapitalize="none"
+            />
+            <button
+              type="button"
+              onClick={copy}
+              title="Copiar código"
+              className="shrink-0 rounded-lg border border-slate-300 px-2 text-sm text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              {copied ? '✓' : 'Copiar'}
+            </button>
+          </div>
+        </label>
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || !dirty || !name.trim() || !code.trim()}
+          className="btn-primary shrink-0 text-sm disabled:opacity-40"
+        >
+          Guardar
+        </button>
+        <button
+          type="button"
+          onClick={remove}
+          disabled={busy}
+          title="Borrar organización"
+          className="shrink-0 rounded-lg border border-red-200 px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-900/50 dark:hover:bg-red-950/30"
+        >
+          Borrar
+        </button>
+      </div>
+      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
+    </div>
+  );
+}
+
+/**
  * Gestión de códigos de organización de un tenant. Cada código crea un Espacio
  * Matrix aislado: quien se registra con él solo se descubre con su organización.
  * Sin código, el usuario entra al espacio Global (todos entre sí).
@@ -309,19 +427,9 @@ function OrgCodesSection({ tenantId }: { tenantId: string }) {
       </p>
 
       {orgs.length > 0 ? (
-        <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+        <div className="space-y-2">
           {orgs.map((o) => (
-            <div key={o.id} className="flex items-center justify-between px-3 py-2 text-sm">
-              <div>
-                <span className="font-medium text-slate-700 dark:text-slate-200">{o.name}</span>
-                <span className="ml-2 rounded bg-brand/10 px-2 py-0.5 font-mono text-xs text-brand">
-                  {o.code}
-                </span>
-              </div>
-              <span className="font-mono text-[11px] text-slate-400" title={o.spaceId}>
-                {o.spaceId.slice(0, 14)}…
-              </span>
-            </div>
+            <OrgRow key={o.id} tenantId={tenantId} org={o} onChanged={load} />
           ))}
         </div>
       ) : (

@@ -1,5 +1,5 @@
 import type { Organization as PrismaOrg, Tenant as PrismaTenant } from '@prisma/client';
-import type { CreateOrganizationInput } from '@whalabi/shared';
+import type { CreateOrganizationInput, UpdateOrganizationInput } from '@whalabi/shared';
 import { prisma } from '../db.js';
 import { logger } from '../logger.js';
 import { createSpace, forceJoinRoom, listUsers } from './synapse-admin.js';
@@ -103,6 +103,46 @@ export async function createOrganization(
   return prisma.organization.create({
     data: { tenantId: tenant.id, name: input.name, code, spaceId, createdBy: createdBy ?? null },
   });
+}
+
+/**
+ * Actualiza el nombre y/o el código de una organización. Al cambiar el código
+ * NO se toca el Espacio ni sus miembros actuales: solo cambia qué texto deben
+ * teclear los NUEVOS integrantes al registrarse. Valida unicidad del código.
+ */
+export async function updateOrganization(
+  tenantId: string,
+  orgId: string,
+  input: UpdateOrganizationInput,
+): Promise<PrismaOrg> {
+  const org = await prisma.organization.findFirst({ where: { id: orgId, tenantId } });
+  if (!org) throw new Error('Organización no encontrada.');
+
+  const code = input.code !== undefined ? normalizeOrgCode(input.code) : undefined;
+  if (code && code !== org.code) {
+    const clash = await prisma.organization.findUnique({
+      where: { tenantId_code: { tenantId, code } },
+    });
+    if (clash) throw new Error(`Ya existe una organización con el código "${code}".`);
+  }
+
+  return prisma.organization.update({
+    where: { id: orgId },
+    data: {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(code !== undefined ? { code } : {}),
+    },
+  });
+}
+
+/**
+ * Borra el registro de una organización de Whalabi. NO borra el Espacio Matrix
+ * (sus miembros e historial siguen en Synapse); solo deja de ofrecer el código.
+ */
+export async function deleteOrganization(tenantId: string, orgId: string): Promise<void> {
+  const org = await prisma.organization.findFirst({ where: { id: orgId, tenantId } });
+  if (!org) throw new Error('Organización no encontrada.');
+  await prisma.organization.delete({ where: { id: orgId } });
 }
 
 /** Resuelve una organización por su código dentro de un tenant. */

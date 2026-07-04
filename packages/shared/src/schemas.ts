@@ -86,6 +86,16 @@ export const createOrganizationSchema = z.object({
   code: orgCodeSchema.optional(),
 });
 
+/** Cuerpo para actualizar una organización (nombre y/o código). */
+export const updateOrganizationSchema = z
+  .object({
+    name: z.string().min(2).max(120).optional(),
+    code: orgCodeSchema.optional(),
+  })
+  .refine((v) => v.name !== undefined || v.code !== undefined, {
+    message: 'Envía al menos un campo (name o code).',
+  });
+
 /**
  * Cuerpo para unir al usuario recién registrado a su espacio.
  * El usuario se autentica con su propio access token de Matrix (Authorization:
@@ -113,6 +123,7 @@ export const pushUnsubscribeSchema = z.object({
 
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
+export type UpdateOrganizationInput = z.infer<typeof updateOrganizationSchema>;
 export type JoinOrgInput = z.infer<typeof joinOrgSchema>;
 export type PushSubscriptionInput = z.infer<typeof pushSubscriptionSchema>;
 export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;

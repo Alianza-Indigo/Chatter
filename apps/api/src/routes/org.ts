@@ -1,13 +1,19 @@
 import type { FastifyInstance } from 'fastify';
-import { createOrganizationSchema, joinOrgSchema } from '@whalabi/shared';
+import {
+  createOrganizationSchema,
+  joinOrgSchema,
+  updateOrganizationSchema,
+} from '@whalabi/shared';
 import { requireAdmin } from '../middleware/auth.js';
 import { getTenantById, resolveTenantByDomain } from '../services/tenant.js';
 import {
   backfillGlobalSpace,
   createOrganization,
+  deleteOrganization,
   joinUserToOrgSpace,
   listOrganizations,
   resolveOrgByCode,
+  updateOrganization,
 } from '../services/org.js';
 import { whoami } from '../services/synapse-admin.js';
 import { toOrganization } from '../mappers.js';
@@ -130,6 +136,42 @@ export async function orgAdminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send({
         error: 'conflict',
         message: err instanceof Error ? err.message : 'No se pudo crear la organización.',
+      });
+    }
+  });
+
+  app.patch('/api/admin/tenants/:id/orgs/:orgId', async (req, reply) => {
+    const { id, orgId } = req.params as { id: string; orgId: string };
+    const parsed = updateOrganizationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
+    }
+    const tenant = await getTenantById(id);
+    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
+    try {
+      const org = await updateOrganization(tenant.id, orgId, parsed.data);
+      return reply.send(toOrganization(org));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudo actualizar.';
+      const notFound = message.includes('no encontrada');
+      return reply.code(notFound ? 404 : 409).send({
+        error: notFound ? 'not_found' : 'conflict',
+        message,
+      });
+    }
+  });
+
+  app.delete('/api/admin/tenants/:id/orgs/:orgId', async (req, reply) => {
+    const { id, orgId } = req.params as { id: string; orgId: string };
+    const tenant = await getTenantById(id);
+    if (!tenant) return reply.code(404).send({ error: 'tenant_not_found' });
+    try {
+      await deleteOrganization(tenant.id, orgId);
+      return reply.code(204).send();
+    } catch (err) {
+      return reply.code(404).send({
+        error: 'not_found',
+        message: err instanceof Error ? err.message : 'No se pudo borrar.',
       });
     }
   });
