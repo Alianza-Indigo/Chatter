@@ -67,6 +67,7 @@ export default function OrganizationsPage() {
 function OrgManager({ tenantId }: { tenantId: string }) {
   const [orgs, setOrgs] = useState<Organization[]>([]);
   const [name, setName] = useState('');
+  const [requiresCode, setRequiresCode] = useState(true);
   const [code, setCode] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -91,10 +92,15 @@ function OrgManager({ tenantId }: { tenantId: string }) {
     try {
       await adminFetch(`/api/admin/tenants/${tenantId}/orgs`, {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), code: code.trim() || undefined }),
+        body: JSON.stringify({
+          name: name.trim(),
+          requiresCode,
+          code: requiresCode ? code.trim() || undefined : undefined,
+        }),
       });
       setName('');
       setCode('');
+      setRequiresCode(true);
       setMsg('Organización creada ✓');
       await load();
     } catch (e) {
@@ -117,17 +123,53 @@ function OrgManager({ tenantId }: { tenantId: string }) {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
           Nueva organización
         </h2>
+
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs font-medium text-slate-500">Nombre</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Clínica San Rafael" />
+        </label>
+
+        {/* Con código / sin código */}
+        <div className="mb-3 grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setRequiresCode(true)}
+            className={`rounded-lg border p-3 text-left text-sm transition ${
+              requiresCode
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            <span className="block font-medium">Con código (aislada)</span>
+            <span className="block text-xs opacity-80">
+              Se registran con el código y solo se ven entre ellos.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setRequiresCode(false)}
+            className={`rounded-lg border p-3 text-left text-sm transition ${
+              !requiresCode
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            <span className="block font-medium">Sin código (general)</span>
+            <span className="block text-xs opacity-80">
+              Entran sin código al espacio general; se ven con todos.
+            </span>
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-end gap-2">
-          <label className="min-w-40 flex-1">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Nombre</span>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Clínica San Rafael" />
-          </label>
-          <label className="min-w-40 flex-1">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Código (opcional)</span>
-            <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="se genera del nombre" autoCapitalize="none" />
-          </label>
+          {requiresCode && (
+            <label className="min-w-40 flex-1">
+              <span className="mb-1 block text-xs font-medium text-slate-500">Código (opcional)</span>
+              <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="se genera del nombre" autoCapitalize="none" />
+            </label>
+          )}
           <button type="button" onClick={create} disabled={busy || !name.trim()} className="btn-primary shrink-0 text-sm">
-            {busy ? 'Creando…' : 'Crear'}
+            {busy ? 'Creando…' : 'Crear organización'}
           </button>
         </div>
       </div>
@@ -194,20 +236,22 @@ function OrgRow({
   org: Organization;
   onChanged: () => void;
 }) {
+  const isGeneral = org.code === null;
   const [name, setName] = useState(org.name);
-  const [code, setCode] = useState(org.code);
+  const [code, setCode] = useState(org.code ?? '');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     setName(org.name);
-    setCode(org.code);
+    setCode(org.code ?? '');
   }, [org.name, org.code]);
 
-  const dirty = name.trim() !== org.name || code.trim() !== org.code;
+  const dirty = name.trim() !== org.name || (!isGeneral && code.trim() !== org.code);
 
   async function copy() {
+    if (!org.code) return;
     try {
       await navigator.clipboard.writeText(org.code);
       setCopied(true);
@@ -218,13 +262,15 @@ function OrgRow({
   }
 
   async function save() {
-    if (!dirty || !name.trim() || !code.trim()) return;
+    if (!dirty || !name.trim() || (!isGeneral && !code.trim())) return;
     setBusy(true);
     setErr(null);
     try {
       await adminFetch(`/api/admin/tenants/${tenantId}/orgs/${org.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ name: name.trim(), code: code.trim() }),
+        body: JSON.stringify(
+          isGeneral ? { name: name.trim() } : { name: name.trim(), code: code.trim() },
+        ),
       });
       onChanged();
     } catch (e) {
@@ -256,29 +302,38 @@ function OrgRow({
           <span className="mb-1 block text-[11px] font-medium text-slate-400">Nombre</span>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
-        <label className="min-w-32 flex-1">
-          <span className="mb-1 block text-[11px] font-medium text-slate-400">Código</span>
-          <div className="flex gap-1">
-            <input
-              className="input font-mono"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              autoCapitalize="none"
-            />
-            <button
-              type="button"
-              onClick={copy}
-              title="Copiar código"
-              className="shrink-0 rounded-lg border border-slate-300 px-2 text-sm text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-            >
-              {copied ? '✓' : 'Copiar'}
-            </button>
+        {isGeneral ? (
+          <div className="min-w-32 flex-1">
+            <span className="mb-1 block text-[11px] font-medium text-slate-400">Acceso</span>
+            <span className="inline-block rounded bg-slate-100 px-2 py-1.5 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              General · sin código
+            </span>
           </div>
-        </label>
+        ) : (
+          <label className="min-w-32 flex-1">
+            <span className="mb-1 block text-[11px] font-medium text-slate-400">Código</span>
+            <div className="flex gap-1">
+              <input
+                className="input font-mono"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                autoCapitalize="none"
+              />
+              <button
+                type="button"
+                onClick={copy}
+                title="Copiar código"
+                className="shrink-0 rounded-lg border border-slate-300 px-2 text-sm text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                {copied ? '✓' : 'Copiar'}
+              </button>
+            </div>
+          </label>
+        )}
         <button
           type="button"
           onClick={save}
-          disabled={busy || !dirty || !name.trim() || !code.trim()}
+          disabled={busy || !dirty || !name.trim() || (!isGeneral && !code.trim())}
           className="btn-primary shrink-0 text-sm disabled:opacity-40"
         >
           Guardar

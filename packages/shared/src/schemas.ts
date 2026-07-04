@@ -82,7 +82,13 @@ export const orgCodeSchema = z
 /** Cuerpo para crear una organización (panel admin). */
 export const createOrganizationSchema = z.object({
   name: z.string().min(2).max(120),
-  /** Si se omite, la API genera un código a partir del nombre. */
+  /**
+   * true (por defecto) = organización aislada con código: se registra con él y
+   * solo se ven entre ellos. false = "sin código": sus miembros van al espacio
+   * general y se ven con todos los demás sin código.
+   */
+  requiresCode: z.boolean().default(true),
+  /** Solo aplica si requiresCode. Si se omite, se genera del nombre. */
   code: orgCodeSchema.optional(),
 });
 

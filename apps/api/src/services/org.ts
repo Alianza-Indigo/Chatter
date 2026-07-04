@@ -124,6 +124,16 @@ export async function createOrganization(
   input: CreateOrganizationInput,
   createdBy?: string,
 ): Promise<PrismaOrg> {
+  // "Sin código": la organización representa el espacio general. Sus miembros
+  // (los que se registran sin código) se ven con todos los demás sin código.
+  if (input.requiresCode === false) {
+    const spaceId = await ensureGlobalSpace(tenant);
+    return prisma.organization.create({
+      data: { tenantId: tenant.id, name: input.name, code: null, spaceId, createdBy: createdBy ?? null },
+    });
+  }
+
+  // "Con código": organización aislada con su propio espacio.
   const code = normalizeOrgCode(input.code ?? codeFromName(input.name));
   const existing = await prisma.organization.findUnique({
     where: { tenantId_code: { tenantId: tenant.id, code } },
@@ -223,6 +233,6 @@ export async function joinUserToOrgSpace(
   return {
     spaceId: org.spaceId,
     scope: 'organization',
-    organization: { id: org.id, name: org.name, code: org.code },
+    organization: { id: org.id, name: org.name, code: org.code ?? '' },
   };
 }

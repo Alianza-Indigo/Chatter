@@ -52,15 +52,20 @@ directorio global. El aislamiento lo impone Synapse, no la app.
 
 ### Alta de una organización
 
-1. En el panel admin, entra a la sección **Organizaciones** (nivel superior). Si
-   hay varios dominios/tenants, elige el dominio en el selector.
-2. Crea la organización con un nombre (y opcionalmente un código; si no, se
-   genera del nombre). Se crea automáticamente su Espacio Matrix aislado.
-3. Comparte el código con sus integrantes. Al registrarse con él, quedan dentro.
+1. En el panel admin, entra a la sección **Organizaciones** (nivel superior).
+2. Crea la organización con un nombre y elige:
+   - **Con código (aislada)**: se genera/defines un código; se crea su Espacio
+     Matrix aislado. Sus miembros se registran con el código y solo se ven entre
+     ellos.
+   - **Sin código (general)**: sus miembros entran sin código al espacio general
+     y se ven con todos los demás "sin código" (hay un solo espacio general).
+3. Comparte el código (si aplica) con sus integrantes.
 
-> Nota de nomenclatura: en el panel, **Dominios** son los tenants (config por
-> dominio: marca, bot, LLM) y **Organizaciones** son los grupos por código
-> dentro de un dominio. Una organización vive dentro de un dominio.
+> Nota de nomenclatura: en el panel, **Organizaciones** son los grupos que crea
+> el admin (con/sin código). **Sitio** es la configuración a nivel de dominio
+> (marca, bot, LLM); en una instalación de un solo dominio casi no se toca.
+> Técnicamente muchas organizaciones conviven en el mismo dominio gracias al
+> **código** (no al dominio).
 
 ### Bloqueo de contacto cruzado (refuerzo en el servidor)
 

@@ -8,7 +8,7 @@ import { adminLogin, getAdminToken, clearAdminToken } from '@/lib/admin';
 const NAV = [
   { href: '/admin/dashboard', label: 'Estado' },
   { href: '/admin/organizations', label: 'Organizaciones' },
-  { href: '/admin/tenants', label: 'Dominios' },
+  { href: '/admin/tenants', label: 'Sitio' },
   { href: '/admin/users', label: 'Usuarios' },
   { href: '/admin/invitations', label: 'Invitaciones' },
   { href: '/admin/logs', label: 'Logs' },

@@ -90,7 +90,8 @@ export interface Organization {
   id: string;
   tenantId: string;
   name: string;
-  code: string;
+  /** null = organización "sin código" (sus miembros van al espacio general). */
+  code: string | null;
   spaceId: string;
   createdAt: string;
   updatedAt: string;

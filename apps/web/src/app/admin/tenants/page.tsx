@@ -29,7 +29,7 @@ export default function TenantsPage() {
       <div className="w-64 shrink-0">
         <div className="mb-3 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-            Dominios
+            Sitio
           </h1>
           <button
             type="button"

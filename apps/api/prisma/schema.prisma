@@ -109,8 +109,10 @@ model Organization {
   tenantId  String
   name      String
   /// Código que el usuario introduce al registrarse (único por tenant).
-  code      String
+  /// null = organización "sin código": sus miembros van al espacio general.
+  code      String?
   /// Espacio Matrix (!roomid:server) al que se une a los miembros de la org.
+  /// En las "sin código" es el espacio Global del tenant.
   spaceId   String
   createdBy String?
   createdAt DateTime @default(now())
