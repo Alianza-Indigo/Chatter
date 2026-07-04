@@ -116,8 +116,27 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  memberships OrgMembership[]
+
   @@unique([tenantId, code])
   @@index([tenantId])
+}
+
+/// A qué organización pertenece cada usuario (MXID). organizationId null = Global.
+/// Es el índice que consulta el módulo de Synapse (vía la API interna) para
+/// permitir o bloquear el contacto entre personas: solo se pueden invitar entre
+/// sí quienes comparten organización (o ambos son Globales).
+model OrgMembership {
+  id             String        @id @default(cuid())
+  tenantId       String
+  /// MXID completo, p. ej. @ana:whalabi.app. Único en el homeserver.
+  userId         String        @unique
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  organizationId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
 }
 
 /// Log operativo del bot. No guarda contenido salvo BOT_STORE_CONTENT=true.

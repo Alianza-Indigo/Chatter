@@ -22,6 +22,33 @@ export function normalizeOrgCode(input: string): string {
   return input.trim().toLowerCase();
 }
 
+/** Guarda/actualiza a qué organización pertenece un usuario (null = Global). */
+async function recordMembership(
+  tenantId: string,
+  userId: string,
+  organizationId: string | null,
+): Promise<void> {
+  await prisma.orgMembership.upsert({
+    where: { userId },
+    update: { tenantId, organizationId },
+    create: { tenantId, userId, organizationId },
+  });
+}
+
+/**
+ * ¿Pueden contactarse dos usuarios? Regla: solo si comparten organización (o
+ * ambos son Globales). Lo consulta el módulo de Synapse en cada invitación.
+ * Un usuario sin registro de membresía se trata como Global.
+ */
+export async function mayContact(from: string, to: string): Promise<boolean> {
+  if (from === to) return true;
+  const [a, b] = await Promise.all([
+    prisma.orgMembership.findUnique({ where: { userId: from } }),
+    prisma.orgMembership.findUnique({ where: { userId: to } }),
+  ]);
+  return (a?.organizationId ?? null) === (b?.organizationId ?? null);
+}
+
 /** Deriva un código a partir de un nombre cuando el admin no da uno explícito. */
 function codeFromName(name: string): string {
   const base = name
@@ -68,6 +95,10 @@ export async function backfillGlobalSpace(
       if (u.deactivated) continue;
       try {
         await forceJoinRoom(tenant.matrixBaseUrl, spaceId, u.userId);
+        // No pisar a quien ya tiene org: solo marcar Global a los que no tengan
+        // registro de membresía todavía (usuarios previos al multitenant).
+        const existing = await prisma.orgMembership.findUnique({ where: { userId: u.userId } });
+        if (!existing) await recordMembership(tenant.id, u.userId, null);
         joined += 1;
       } catch (err) {
         logger.warn({ err, userId: u.userId }, 'No se pudo unir usuario al Global (backfill)');
@@ -177,6 +208,7 @@ export async function joinUserToOrgSpace(
   if (!trimmed) {
     const spaceId = await ensureGlobalSpace(tenant);
     await forceJoinRoom(tenant.matrixBaseUrl, spaceId, userId);
+    await recordMembership(tenant.id, userId, null);
     return { spaceId, scope: 'global' };
   }
 
@@ -187,6 +219,7 @@ export async function joinUserToOrgSpace(
     throw err;
   }
   await forceJoinRoom(tenant.matrixBaseUrl, org.spaceId, userId);
+  await recordMembership(tenant.id, userId, org.id);
   return {
     spaceId: org.spaceId,
     scope: 'organization',

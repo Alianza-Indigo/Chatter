@@ -65,6 +65,8 @@ services:
     environment:
       SYNAPSE_SERVER_NAME: ${MATRIX_DEFAULT_SERVER_NAME:-whalabi.local}
       SYNAPSE_REPORT_STATS: "no"
+      # Permite a Synapse importar el módulo de aislamiento (/data/whalabi_isolation.py).
+      PYTHONPATH: /data
     volumes:
       - ./synapse:/data
     ports:
@@ -111,6 +113,8 @@ services:
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-change-me-admin-api-token}
       ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-change-me-please-a-long-random-secret}
+      # Secreto compartido con el módulo de aislamiento de Synapse.
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       CORS_ORIGIN: ${APP_PUBLIC_URL:-http://localhost:3000}
       LLM_PROVIDER: ${LLM_PROVIDER:-dummy}

@@ -70,6 +70,19 @@ user_directory:
   search_all_users: false
   prefer_local_users: true
 
+# --- Aislamiento entre organizaciones (bloqueo de contacto cruzado) ---
+# El directorio (search_all_users:false) evita que te DESCUBRAN de otra org, pero
+# quien conozca un MXID exacto podría invitar/DM a alguien de otra organización.
+# Este módulo lo impide en el servidor: solo se pueden invitar entre sí quienes
+# comparten organización (o ambos son Globales). Consulta la API de Whalabi.
+modules:
+  - module: whalabi_isolation.WhalabiIsolation
+    config:
+      api_url: "http://api:4000"
+      secret: "${INTERNAL_API_SECRET}"
+      exempt_users: "${ISOLATION_EXEMPT_USERS}"
+      fail_open: true
+
 # --- Llamadas (WebRTC / VoIP) ---
 # Synapse entrega a los clientes las credenciales del servidor TURN (coturn) para
 # que las llamadas 1:1 funcionen a través de NAT/firewalls. Comparte el mismo

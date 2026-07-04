@@ -48,8 +48,11 @@ echo "==> Aplicando config de Whalabi (homeserver.yaml + log.config)…"
 : "${RECAPTCHA_PUBLIC_KEY:=}"
 : "${RECAPTCHA_PRIVATE_KEY:=}"
 : "${TURN_SHARED_SECRET:=}"
+: "${INTERNAL_API_SECRET:=}"
+: "${ISOLATION_EXEMPT_USERS:=}"
 export MATRIX_DEFAULT_SERVER_NAME APP_PUBLIC_URL MATRIX_REGISTRATION_SHARED_SECRET
 export RECAPTCHA_PUBLIC_KEY RECAPTCHA_PRIVATE_KEY TURN_SHARED_SECRET
+export INTERNAL_API_SECRET ISOLATION_EXEMPT_USERS
 
 # Escribe stdin al destino usando sudo solo si el archivo destino (o su carpeta,
 # si no existe) no es escribible por el usuario actual. Checar el ARCHIVO, no solo
@@ -64,12 +67,16 @@ write_to() {
   fi
 }
 
-envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET} ${RECAPTCHA_PUBLIC_KEY} ${RECAPTCHA_PRIVATE_KEY} ${TURN_SHARED_SECRET}' \
+envsubst '${MATRIX_DEFAULT_SERVER_NAME} ${APP_PUBLIC_URL} ${MATRIX_REGISTRATION_SHARED_SECRET} ${RECAPTCHA_PUBLIC_KEY} ${RECAPTCHA_PRIVATE_KEY} ${TURN_SHARED_SECRET} ${INTERNAL_API_SECRET} ${ISOLATION_EXEMPT_USERS}' \
   < "$CONFIG_DIR/homeserver.yaml.template" \
   | write_to "$SYNAPSE_DIR/homeserver.yaml"
 
 # Copiar log.config al volumen (homeserver.yaml lo referencia como /data/log.config).
 write_to "$SYNAPSE_DIR/log.config" < "$CONFIG_DIR/log.config"
+
+# Copiar el módulo de aislamiento al volumen. Synapse lo importa gracias a
+# PYTHONPATH=/data (ver docker-compose). Debe existir antes de arrancar Synapse.
+write_to "$SYNAPSE_DIR/whalabi_isolation.py" < "$CONFIG_DIR/whalabi_isolation.py"
 
 echo "==> Listo. Arranca Synapse con:"
 echo "    docker compose -f infra/docker-compose.yml up -d postgres-synapse synapse"

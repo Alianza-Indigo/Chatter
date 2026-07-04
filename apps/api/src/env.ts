@@ -16,6 +16,12 @@ const envSchema = z.object({
 
   ADMIN_API_TOKEN: z.string().min(1).default('change-me-admin-api-token'),
   ADMIN_JWT_SECRET: z.string().min(1).default('change-me-please-a-long-random-secret'),
+  /**
+   * Secreto compartido con el módulo de aislamiento de Synapse para autenticar
+   * el endpoint interno /api/internal/may-contact. Vacío = endpoint deshabilitado
+   * (el módulo entonces no fuerza el bloqueo entre organizaciones).
+   */
+  INTERNAL_API_SECRET: z.string().optional().default(''),
   /** Clave para cifrar secretos en reposo (llmApiKey). Vacía = texto plano (solo dev). */
   APP_ENCRYPTION_KEY: z.string().optional().default(''),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),

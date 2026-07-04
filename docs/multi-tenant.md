@@ -57,6 +57,33 @@ directorio global. El aislamiento lo impone Synapse, no la app.
    genera del nombre). Se crea automáticamente su Espacio Matrix aislado.
 3. Comparte el código con sus integrantes. Al registrarse con él, quedan dentro.
 
+### Bloqueo de contacto cruzado (refuerzo en el servidor)
+
+`search_all_users:false` evita que te **descubran** de otra organización, pero
+quien conociera un MXID exacto (`@juan:whalabi.app`) podría invitarlo/DM aunque
+no compartan espacio. Para cerrarlo, un **módulo de Synapse**
+(`infra/synapse-config/whalabi_isolation.py`) intercepta cada invitación
+(`user_may_invite`) y la permite **solo si ambos comparten organización** (o
+ambos son Globales). La decisión la toma consultando la API interna:
+
+```
+Synapse (módulo) ──GET /api/internal/may-contact?from=&to=──▶ API Whalabi
+                                                                 │
+                                          índice OrgMembership ◀─┘
+```
+
+- **`OrgMembership`** (Prisma): a qué organización pertenece cada MXID
+  (`organizationId` null = Global). Se registra al unirse y en el backfill.
+- **`INTERNAL_API_SECRET`**: secreto compartido (cabecera `x-internal-secret`).
+  Vacío = bloqueo por servidor deshabilitado (el descubrimiento acotado sigue).
+- **`ISOLATION_EXEMPT_USERS`**: MXIDs que nunca se bloquean (bot, soporte).
+- **`fail_open: true`**: si la API no responde, la invitación se permite (para no
+  romper la mensajería); ponlo en `false` para máxima privacidad.
+
+Requiere `PYTHONPATH=/data` en el contenedor de Synapse (ya en el compose) y que
+`init-synapse.sh` copie el módulo al volumen (ya lo hace). Tras cambiar el
+template, regenera y reinicia Synapse.
+
 ### Rollout en un servidor con usuarios existentes
 
 Al activar `search_all_users: false`, las cuentas creadas antes no están en
