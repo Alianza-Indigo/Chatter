@@ -1,0 +1,55 @@
+# Whalabi — Caddy DETRÁS de Cloudflare Tunnel (sin abrir puertos del router).
+#
+# Cloudflare termina el TLS y reenvía HTTP al túnel; por eso aquí NO gestionamos
+# certificados (auto_https off) y escuchamos en texto plano. El túnel
+# (cloudflared) apunta sus hostnames públicos a http://caddy-tunnel:80 y este
+# archivo enruta por Host/path igual que en producción.
+#
+# En el panel de Cloudflare Tunnel, define dos "public hostnames":
+#   {WHALABI_DOMAIN}         -> http://caddy-tunnel:80
+#   ntfy.{WHALABI_DOMAIN}    -> http://caddy-tunnel:80
+# (Ambos al mismo Caddy; aquí se separan por el Host.)
+
+{
+	auto_https off
+	admin off
+}
+
+http://{$WHALABI_DOMAIN} {
+	encode gzip
+
+	# Descubrimiento Matrix (well-known)
+	handle /.well-known/matrix/server {
+		header Content-Type application/json
+		respond `{"m.server": "{$WHALABI_DOMAIN}:443"}` 200
+	}
+	handle /.well-known/matrix/client {
+		header Content-Type application/json
+		header Access-Control-Allow-Origin *
+		respond `{"m.homeserver": {"base_url": "https://{$WHALABI_DOMAIN}"}}` 200
+	}
+
+	# Matrix Client-Server API
+	handle /_matrix/* {
+		reverse_proxy synapse:8008
+	}
+	handle /_synapse/client/* {
+		reverse_proxy synapse:8008
+	}
+
+	# API auxiliar
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	# Frontend (PWA)
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+# Notificaciones push autohospedadas (UnifiedPush / ntfy).
+http://ntfy.{$WHALABI_DOMAIN} {
+	encode gzip
+	reverse_proxy ntfy:80
+}

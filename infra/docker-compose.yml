@@ -199,6 +199,33 @@ services:
     volumes:
       - ntfy-data:/var/lib/ntfy
 
+  # Caddy en modo HTTP (sin TLS) para servir DETRÁS de Cloudflare Tunnel.
+  # No publica puertos: solo lo alcanza cloudflared dentro de la red de compose.
+  caddy-tunnel:
+    profiles: ["cloudflare"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+      - api
+      - synapse
+    environment:
+      WHALABI_DOMAIN: ${WHALABI_DOMAIN:-localhost}
+    volumes:
+      - ./caddy/Caddyfile.tunnel:/etc/caddy/Caddyfile:ro
+
+  # Cloudflare Tunnel: expone Whalabi con HTTPS sin abrir puertos del router ni
+  # chocar con los puertos de QTS. Crea el túnel en el panel de Cloudflare
+  # (Zero Trust → Networks → Tunnels), copia el token a CLOUDFLARE_TUNNEL_TOKEN
+  # y apunta los hostnames públicos a http://caddy-tunnel:80.
+  cloudflared:
+    profiles: ["cloudflare"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - caddy-tunnel
+
   nginx:
     profiles: ["proxy"]
     image: nginx:alpine

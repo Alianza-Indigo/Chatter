@@ -86,10 +86,12 @@ modules:
 # --- Llamadas (WebRTC / VoIP) ---
 # Synapse entrega a los clientes las credenciales del servidor TURN (coturn) para
 # que las llamadas 1:1 funcionen a través de NAT/firewalls. Comparte el mismo
-# secreto que coturn (TURN_SHARED_SECRET). El host TURN es el dominio público.
+# secreto que coturn (TURN_SHARED_SECRET). TURN_HOST es el host que los clientes
+# usan para llegar a coturn (debe ser DIRECTAMENTE alcanzable, no vía Cloudflare):
+# el dominio público con UDP abierto, o la IP LAN del NAS para pruebas en red local.
 turn_uris:
-  - "turn:${MATRIX_DEFAULT_SERVER_NAME}:3478?transport=udp"
-  - "turn:${MATRIX_DEFAULT_SERVER_NAME}:3478?transport=tcp"
+  - "turn:${TURN_HOST}:3478?transport=udp"
+  - "turn:${TURN_HOST}:3478?transport=tcp"
 turn_shared_secret: "${TURN_SHARED_SECRET}"
 turn_user_lifetime: 86400000
 turn_allow_guests: false
