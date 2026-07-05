@@ -49,6 +49,19 @@ function codeFromName(name: string): string {
   return base || 'org';
 }
 
+/** Slug único: el `base`; si ya existe, prueba base-2, base-3, … El slug es un
+ *  id interno, así que se ajusta solo sin molestar al admin. */
+async function uniqueSlug(base: string): Promise<string> {
+  const clean = normalizeOrgCode(base).replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'org';
+  let candidate = clean;
+  for (let i = 2; i < 1000; i++) {
+    const clash = await prisma.tenant.findUnique({ where: { slug: candidate } });
+    if (!clash) return candidate;
+    candidate = `${clean}-${i}`;
+  }
+  return `${clean}-${clean.length}`;
+}
+
 export async function createTenant(input: CreateTenantInput): Promise<PrismaTenant> {
   // Código de acceso: con código -> aislada; sin código -> general (null).
   let code: string | null = null;
@@ -57,10 +70,12 @@ export async function createTenant(input: CreateTenantInput): Promise<PrismaTena
     const clash = await prisma.tenant.findUnique({ where: { code } });
     if (clash) throw new Error(`Ya existe una organización con el código "${code}".`);
   }
+  // El slug es interno; garantizamos unicidad automáticamente para no romper el alta.
+  const slug = await uniqueSlug(input.slug || input.name);
   return prisma.tenant.create({
     data: {
       name: input.name,
-      slug: input.slug,
+      slug,
       publicDomain: input.publicDomain ? normalizeDomain(input.publicDomain) : null,
       code,
       matrixBaseUrl: input.matrixBaseUrl ?? env.MATRIX_DEFAULT_HOMESERVER_URL,
