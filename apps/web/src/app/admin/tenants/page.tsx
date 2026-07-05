@@ -254,7 +254,7 @@ function TenantForm({
       <Section title="Avanzado (opcional)">
         <Field label="Slug (id interno; se genera del nombre)"><input className="input" value={form.slug} onChange={(e) => set('slug', e.target.value)} /></Field>
         <Field label="Dominio propio (para subdominio futuro)"><input className="input" value={form.publicDomain ?? ''} onChange={(e) => set('publicDomain', e.target.value)} placeholder="(vacío)" /></Field>
-        <Field label="Matrix base URL (vacío = homeserver del despliegue)"><input className="input" value={form.matrixBaseUrl} onChange={(e) => set('matrixBaseUrl', e.target.value)} placeholder="(por defecto)" /></Field>
+        <Field label="Matrix base URL (URL pública; vacío = la del sitio)"><input className="input" value={form.matrixBaseUrl} onChange={(e) => set('matrixBaseUrl', e.target.value)} placeholder="https://whalabi.app" /></Field>
         <Field label="Matrix server name (vacío = por defecto)"><input className="input" value={form.matrixServerName} onChange={(e) => set('matrixServerName', e.target.value)} placeholder="(por defecto)" /></Field>
       </Section>
 

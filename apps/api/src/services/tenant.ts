@@ -78,7 +78,10 @@ export async function createTenant(input: CreateTenantInput): Promise<PrismaTena
       slug,
       publicDomain: input.publicDomain ? normalizeDomain(input.publicDomain) : null,
       code,
-      matrixBaseUrl: input.matrixBaseUrl ?? env.MATRIX_DEFAULT_HOMESERVER_URL,
+      // matrixBaseUrl es la URL que usa el NAVEGADOR del usuario para conectarse
+      // al homeserver → debe ser PÚBLICA (APP_PUBLIC_URL, p. ej. https://whalabi.app).
+      // Las operaciones server-side (Admin API) usan el Synapse interno por código.
+      matrixBaseUrl: input.matrixBaseUrl ?? env.APP_PUBLIC_URL,
       matrixServerName: input.matrixServerName ?? env.MATRIX_DEFAULT_SERVER_NAME,
       botUserId: input.botUserId ?? null,
       botEnabled: input.botEnabled ?? false,
