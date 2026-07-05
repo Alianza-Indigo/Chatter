@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { joinOrgSchema } from '@whalabi/shared';
+import { env } from '../env.js';
 import { resolveTenantByCode, resolveTenantByDomain } from '../services/tenant.js';
 import { joinUserByCode } from '../services/org.js';
 import { whoami } from '../services/synapse-admin.js';
@@ -46,7 +47,7 @@ export async function orgPublicRoutes(app: FastifyInstance): Promise<void> {
     const hostTenant = await resolveTenantByDomain(hostOf(req));
     if (!hostTenant) return reply.code(404).send({ error: 'tenant_not_found' });
 
-    const userId = await whoami(hostTenant.matrixBaseUrl, token);
+    const userId = await whoami(env.MATRIX_DEFAULT_HOMESERVER_URL, token);
     if (!userId) {
       return reply.code(401).send({ error: 'unauthorized', message: 'Token de acceso inválido.' });
     }

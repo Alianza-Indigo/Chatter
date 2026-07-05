@@ -1,5 +1,6 @@
 import type { Tenant as PrismaTenant } from '@prisma/client';
 import { prisma } from '../db.js';
+import { env } from '../env.js';
 import { logger } from '../logger.js';
 import { createSpace, forceJoinRoom, listUsers } from './synapse-admin.js';
 import { resolveTenantByCode } from './tenant.js';
@@ -16,12 +17,19 @@ import { resolveTenantByCode } from './tenant.js';
  * permite descubrirse; y el módulo de aislamiento (vía mayContact) bloquea el
  * contacto entre organizaciones distintas. Los espacios se crean vía la Synapse
  * Admin API y la unión se hace con force-join.
+ *
+ * IMPORTANTE: las operaciones administrativas (crear espacio, listar usuarios,
+ * force-join) van SIEMPRE al Synapse INTERNO (env.MATRIX_DEFAULT_HOMESERVER_URL,
+ * p. ej. http://synapse:8008), NO al `matrixBaseUrl` del tenant. Ese puede ser la
+ * URL pública, y el reverse proxy (Caddy) no expone `/_synapse/admin/*` por
+ * seguridad → daría 404. La Admin API solo está disponible en el puerto interno.
  */
+const ADMIN_HS = env.MATRIX_DEFAULT_HOMESERVER_URL;
 
 /** Asegura el espacio Matrix de una organización; lo crea la primera vez. */
 export async function ensureTenantSpace(tenant: PrismaTenant): Promise<string> {
   if (tenant.spaceId) return tenant.spaceId;
-  const spaceId = await createSpace(tenant.matrixBaseUrl, tenant.name);
+  const spaceId = await createSpace(ADMIN_HS, tenant.name);
   await prisma.tenant.update({ where: { id: tenant.id }, data: { spaceId } });
   logger.info({ tenantId: tenant.id, spaceId }, 'Espacio de organización creado');
   return spaceId;
@@ -83,7 +91,7 @@ export async function joinUserByCode(
   }
 
   const spaceId = await ensureTenantSpace(target);
-  await forceJoinRoom(target.matrixBaseUrl, spaceId, userId);
+  await forceJoinRoom(ADMIN_HS, spaceId, userId);
   await recordMembership(target.id, userId);
   return {
     spaceId,
@@ -106,13 +114,13 @@ export async function backfillTenant(
   let joined = 0;
   let total = 0;
   for (let page = 0; page < 1000; page++) {
-    const { users, total: count } = await listUsers(tenant.matrixBaseUrl, { limit: 100, from });
+    const { users, total: count } = await listUsers(ADMIN_HS, { limit: 100, from });
     total = count;
     if (users.length === 0) break;
     for (const u of users) {
       if (u.deactivated) continue;
       try {
-        await forceJoinRoom(tenant.matrixBaseUrl, spaceId, u.userId);
+        await forceJoinRoom(ADMIN_HS, spaceId, u.userId);
         const existing = await prisma.orgMembership.findUnique({ where: { userId: u.userId } });
         if (!existing) await recordMembership(tenant.id, u.userId);
         joined += 1;
