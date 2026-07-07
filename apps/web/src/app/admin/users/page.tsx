@@ -3,15 +3,24 @@
 import { useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/admin';
 
+interface UserOrg {
+  id: string;
+  name: string;
+  slug: string;
+  code: string | null;
+}
+
 interface SynapseUser {
   userId: string;
   displayName: string | null;
   deactivated: boolean;
   admin: boolean;
+  org: UserOrg | null;
 }
 
 export default function UsersPage() {
   const [users, setUsers] = useState<SynapseUser[]>([]);
+  const [orgFilter, setOrgFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ localpart: '', password: '', displayName: '' });
@@ -29,6 +38,14 @@ export default function UsersPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  // Organizaciones presentes (para el filtro), derivadas de los usuarios.
+  const orgs = Array.from(
+    new Map(users.filter((u) => u.org).map((u) => [u.org!.id, u.org!])).values(),
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  const filtered = users.filter((u) =>
+    orgFilter === 'all' ? true : orgFilter === 'none' ? !u.org : u.org?.id === orgFilter,
+  );
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
@@ -71,7 +88,23 @@ export default function UsersPage() {
 
   return (
     <div className="max-w-4xl">
-      <h1 className="mb-6 text-2xl font-semibold text-slate-800 dark:text-slate-100">Usuarios</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">Usuarios</h1>
+        <label className="flex items-center gap-2 text-sm text-slate-500">
+          Organización:
+          <select className="input w-auto" value={orgFilter} onChange={(e) => setOrgFilter(e.target.value)}>
+            <option value="all">Todas ({users.length})</option>
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+                {o.code ? ` · ${o.code}` : ' · general'} (
+                {users.filter((u) => u.org?.id === o.id).length})
+              </option>
+            ))}
+            <option value="none">Sin organización ({users.filter((u) => !u.org).length})</option>
+          </select>
+        </label>
+      </div>
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       <form onSubmit={createUser} className="mb-8 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -98,15 +131,30 @@ export default function UsersPage() {
             <tr>
               <th className="px-4 py-2">Usuario</th>
               <th className="px-4 py-2">Nombre</th>
+              <th className="px-4 py-2">Organización</th>
               <th className="px-4 py-2">Estado</th>
               <th className="px-4 py-2 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {users.map((u) => (
+            {filtered.map((u) => (
               <tr key={u.userId} className="bg-white dark:bg-slate-900">
                 <td className="px-4 py-2 font-mono text-xs text-slate-700 dark:text-slate-200">{u.userId}</td>
                 <td className="px-4 py-2 text-slate-600 dark:text-slate-300">{u.displayName ?? '—'}</td>
+                <td className="px-4 py-2 text-slate-600 dark:text-slate-300">
+                  {u.org ? (
+                    <span className="inline-flex items-center gap-1">
+                      {u.org.name}
+                      {u.org.code ? (
+                        <span className="rounded bg-brand/10 px-1.5 py-0.5 font-mono text-[11px] text-brand">{u.org.code}</span>
+                      ) : (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-400 dark:bg-slate-800">general</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-2">
                   {u.deactivated ? (
                     <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">Baja</span>
@@ -125,8 +173,8 @@ export default function UsersPage() {
                 </td>
               </tr>
             ))}
-            {users.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-400">Sin usuarios (o Synapse Admin API no configurada).</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400">Sin usuarios en este filtro.</td></tr>
             )}
           </tbody>
         </table>

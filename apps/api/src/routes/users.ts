@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { env } from '../env.js';
+import { prisma } from '../db.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { writeAudit } from '../services/audit.js';
 import {
@@ -44,7 +45,19 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         limit: q.limit ? Number(q.limit) : 100,
         from: q.from ? Number(q.from) : 0,
       });
-      return reply.send(result);
+      // Enriquecer cada usuario con su organización (índice OrgMembership).
+      const memberships = await prisma.orgMembership.findMany({
+        include: { tenant: { select: { id: true, name: true, slug: true, code: true } } },
+      });
+      const byUser = new Map(memberships.map((m) => [m.userId, m.tenant]));
+      const users = result.users.map((u) => {
+        const t = byUser.get(u.userId);
+        return {
+          ...u,
+          org: t ? { id: t.id, name: t.name, slug: t.slug, code: t.code } : null,
+        };
+      });
+      return reply.send({ users, total: result.total });
     } catch (err) {
       return reply.code(502).send({ error: 'synapse_error', message: msg(err) });
     }
