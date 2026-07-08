@@ -72,7 +72,10 @@ export default function UsersPage() {
     if (!window.confirm(`¿Dar de baja a ${userId}? Cierra su acceso y lo saca de su organización.`)) return;
     setError(null);
     try {
-      await adminFetch(`/api/admin/users/${encodeURIComponent(userId)}/deactivate`, { method: 'POST' });
+      await adminFetch('/api/admin/users/deactivate', {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+      });
       await load();
     } catch (e) {
       setError(e instanceof Error ? `No se pudo dar de baja: ${e.message}` : 'Error');
@@ -83,9 +86,9 @@ export default function UsersPage() {
     const pw = window.prompt(`Nueva contraseña para ${userId} (mín. 8):`);
     if (!pw) return;
     try {
-      await adminFetch(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+      await adminFetch('/api/admin/users/reset-password', {
         method: 'POST',
-        body: JSON.stringify({ password: pw }),
+        body: JSON.stringify({ userId, password: pw }),
       });
       window.alert('Contraseña actualizada.');
     } catch (e) {

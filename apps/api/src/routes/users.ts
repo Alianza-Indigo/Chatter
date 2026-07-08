@@ -16,10 +16,13 @@ import {
  * Gestión de usuarios Matrix vía la Synapse Admin API.
  * Opera sobre el homeserver por defecto (modo A: Synapse compartido).
  *   GET   /api/admin/users
- *   POST  /api/admin/users
- *   PATCH /api/admin/users/:userId
- *   POST  /api/admin/users/:userId/reset-password
- *   POST  /api/admin/users/:userId/deactivate
+ *   POST  /api/admin/users                    { localpart, password, displayName }
+ *   PATCH /api/admin/users                     { userId, displayName }
+ *   POST  /api/admin/users/reset-password      { userId, password }
+ *   POST  /api/admin/users/deactivate          { userId }
+ *
+ * El userId (MXID) va en el CUERPO, nunca en la URL: los caracteres @ y :
+ * codificados en el path se corrompen al pasar por el reverse proxy.
  */
 const createUserSchema = z.object({
   localpart: z
@@ -77,38 +80,47 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.patch('/api/admin/users/:userId', async (req, reply) => {
-    const { userId } = req.params as { userId: string };
-    const body = z.object({ displayName: z.string().min(1).max(120) }).safeParse(req.body);
+  // El userId (MXID con @ y :) viaja en el CUERPO, no en la URL: los caracteres
+  // codificados en el path se mutilan al pasar por el reverse proxy (Caddy).
+
+  app.patch('/api/admin/users', async (req, reply) => {
+    const body = z
+      .object({ userId: z.string().min(1), displayName: z.string().min(1).max(120) })
+      .safeParse(req.body);
     if (!body.success) {
       return reply.code(400).send({ error: 'bad_request', issues: body.error.issues });
     }
     try {
-      await setDisplayName(baseUrl, userId, body.data.displayName);
-      await writeAudit({ actor: 'admin', action: 'user.update', target: userId });
+      await setDisplayName(baseUrl, body.data.userId, body.data.displayName);
+      await writeAudit({ actor: 'admin', action: 'user.update', target: body.data.userId });
       return reply.send({ ok: true });
     } catch (err) {
       return reply.code(502).send({ error: 'synapse_error', message: msg(err) });
     }
   });
 
-  app.post('/api/admin/users/:userId/reset-password', async (req, reply) => {
-    const { userId } = req.params as { userId: string };
-    const body = z.object({ password: z.string().min(8).max(512) }).safeParse(req.body);
+  app.post('/api/admin/users/reset-password', async (req, reply) => {
+    const body = z
+      .object({ userId: z.string().min(1), password: z.string().min(8).max(512) })
+      .safeParse(req.body);
     if (!body.success) {
       return reply.code(400).send({ error: 'bad_request', issues: body.error.issues });
     }
     try {
-      await resetPassword(baseUrl, userId, body.data.password);
-      await writeAudit({ actor: 'admin', action: 'user.reset_password', target: userId });
+      await resetPassword(baseUrl, body.data.userId, body.data.password);
+      await writeAudit({ actor: 'admin', action: 'user.reset_password', target: body.data.userId });
       return reply.send({ ok: true });
     } catch (err) {
       return reply.code(502).send({ error: 'synapse_error', message: msg(err) });
     }
   });
 
-  app.post('/api/admin/users/:userId/deactivate', async (req, reply) => {
-    const { userId } = req.params as { userId: string };
+  app.post('/api/admin/users/deactivate', async (req, reply) => {
+    const body = z.object({ userId: z.string().min(1) }).safeParse(req.body);
+    if (!body.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: body.error.issues });
+    }
+    const { userId } = body.data;
     try {
       await deactivateUser(baseUrl, userId);
       // Sácalo también de su organización (índice de membresía).
