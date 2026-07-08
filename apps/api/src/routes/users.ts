@@ -111,6 +111,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const { userId } = req.params as { userId: string };
     try {
       await deactivateUser(baseUrl, userId);
+      // Sácalo también de su organización (índice de membresía).
+      await prisma.orgMembership.deleteMany({ where: { userId } });
       await writeAudit({ actor: 'admin', action: 'user.deactivate', target: userId });
       return reply.send({ ok: true });
     } catch (err) {
