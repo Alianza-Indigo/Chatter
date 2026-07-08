@@ -4,7 +4,7 @@
  * al shell offline. NO cachea respuestas de Matrix (sync/mensajes) — esos
  * deben ir siempre a la red.
  */
-const CACHE = 'whalabi-shell-v6';
+const CACHE = 'whalabi-shell-v7';
 const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -27,6 +27,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
+  // Solo mismo origen: no tocar recursos externos.
+  if (url.origin !== self.location.origin) return;
   // No interceptar llamadas a Matrix ni a la API (siempre red).
   if (url.pathname.startsWith('/_matrix') || url.pathname.startsWith('/api')) return;
 
@@ -37,8 +39,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Recursos estáticos: cache primero; si no está, red. Toda falla de red se
+  // captura para NO producir un rechazo no manejado (rompía la carga del asset,
+  // p. ej. durante un redeploy). Se refresca el caché en segundo plano.
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request)),
+    caches.match(request).then((cached) => {
+      const fromNetwork = fetch(request)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => cached || Response.error());
+      return cached || fromNetwork;
+    }),
   );
 });
 
