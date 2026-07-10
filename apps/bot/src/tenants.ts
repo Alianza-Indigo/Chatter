@@ -74,9 +74,15 @@ export async function resolveTenantForRoom(roomId: string): Promise<ResolvedTena
           responseMode: tenant.botResponseMode,
           llm: {
             provider: tenant.llmProvider,
-            baseUrl: tenant.llmBaseUrl ?? env.LLM_BASE_URL,
+            // Gemini nativo tiene su propio endpoint por defecto (Google), así que
+            // NO caemos a env.LLM_BASE_URL (que apunta a OpenAI); vacío = el
+            // proveedor usa su default. Para openai/ollama sí usamos env.
+            baseUrl:
+              tenant.llmBaseUrl ?? (tenant.llmProvider === 'gemini' ? '' : env.LLM_BASE_URL),
             apiKey: decryptSecret(tenant.llmApiKey) ?? env.LLM_API_KEY,
-            model: tenant.llmModel ?? env.LLM_MODEL,
+            model:
+              tenant.llmModel ??
+              (tenant.llmProvider === 'gemini' ? 'gemini-2.5-flash' : env.LLM_MODEL),
           },
         };
       }

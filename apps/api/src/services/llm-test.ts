@@ -35,8 +35,13 @@ export async function testTenantBot(
 
   try {
     if (provider === 'gemini') {
-      const base = baseUrl.replace(/\/openai\/?$/, '').replace(/\/$/, '');
-      const res = await fetch(`${base}/models/${model}:generateContent`, {
+      // Gemini nativo: si no se define base URL, usar el endpoint de Google
+      // (NO env.LLM_BASE_URL, que apunta a OpenAI). Igual que el proveedor del bot.
+      const raw = tenant?.llmBaseUrl?.trim() || 'https://generativelanguage.googleapis.com/v1beta';
+      const base = raw.replace(/\/openai\/?$/, '').replace(/\/$/, '');
+      // Modelo Gemini válido si no se definió uno (env.LLM_MODEL suele ser de OpenAI).
+      const gModel = tenant?.llmModel?.trim() || 'gemini-2.5-flash';
+      const res = await fetch(`${base}/models/${gModel}:generateContent`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
@@ -53,7 +58,7 @@ export async function testTenantBot(
         .map((p) => p.text ?? '')
         .join('')
         .trim();
-      return { ok: true, provider, model, output, latencyMs: Date.now() - start };
+      return { ok: true, provider, model: gModel, output, latencyMs: Date.now() - start };
     }
 
     if (provider === 'ollama') {
