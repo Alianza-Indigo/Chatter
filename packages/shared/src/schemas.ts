@@ -55,10 +55,12 @@ export const createTenantSchema = z.object({
   botSystemPrompt: z.string().max(4000).nullable().optional(),
   botResponseMode: botResponseModeSchema.default('mention'),
   llmProvider: llmProviderKindSchema.default('dummy'),
-  llmModel: z.string().nullable().optional(),
-  llmBaseUrl: z.string().url().nullable().optional(),
+  llmModel: z.string().max(200).nullable().optional(),
+  /** Endpoint del LLM. No forzamos formato URL estricto para no romper el alta
+   *  si falta el https:// o es un host relativo; el proveedor lo normaliza. */
+  llmBaseUrl: z.string().max(500).nullable().optional(),
   /** Clave API del LLM (BYOK). Se cifra en reposo y nunca se expone al frontend. */
-  llmApiKey: z.string().nullable().optional(),
+  llmApiKey: z.string().max(500).nullable().optional(),
   branding: tenantBrandingSchema.optional(),
   allowRegistration: z.boolean().default(false),
 });
