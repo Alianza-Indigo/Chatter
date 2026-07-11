@@ -26,11 +26,46 @@ import { resolveTenantByCode } from './tenant.js';
  */
 const ADMIN_HS = env.MATRIX_DEFAULT_HOMESERVER_URL;
 
+function botUserIdForTenant(tenant: PrismaTenant): string | null {
+  const configured = tenant.botUserId?.trim();
+  if (configured) return configured;
+  const serverName = tenant.matrixServerName || env.MATRIX_DEFAULT_SERVER_NAME;
+  return serverName ? `@whalabi-bot:${serverName}` : null;
+}
+
+async function isTenantBotUser(userId: string): Promise<boolean> {
+  const fallbackBotId = `@whalabi-bot:${env.MATRIX_DEFAULT_SERVER_NAME}`;
+  if (userId === fallbackBotId) return true;
+  const tenant = await prisma.tenant.findFirst({
+    where: { botUserId: userId },
+    select: { id: true },
+  });
+  return Boolean(tenant);
+}
+
+async function ensureBotInSpace(tenant: PrismaTenant, spaceId: string): Promise<void> {
+  if (!tenant.botEnabled) return;
+  const botUserId = botUserIdForTenant(tenant);
+  if (!botUserId) return;
+  try {
+    await forceJoinRoom(ADMIN_HS, spaceId, botUserId);
+  } catch (err) {
+    logger.warn(
+      { err, tenantId: tenant.id, spaceId, botUserId },
+      'No se pudo unir el bot al espacio',
+    );
+  }
+}
+
 /** Asegura el espacio Matrix de una organización; lo crea la primera vez. */
 export async function ensureTenantSpace(tenant: PrismaTenant): Promise<string> {
-  if (tenant.spaceId) return tenant.spaceId;
+  if (tenant.spaceId) {
+    await ensureBotInSpace(tenant, tenant.spaceId);
+    return tenant.spaceId;
+  }
   const spaceId = await createSpace(ADMIN_HS, tenant.name);
-  await prisma.tenant.update({ where: { id: tenant.id }, data: { spaceId } });
+  const updated = await prisma.tenant.update({ where: { id: tenant.id }, data: { spaceId } });
+  await ensureBotInSpace(updated, spaceId);
   logger.info({ tenantId: tenant.id, spaceId }, 'Espacio de organización creado');
   return spaceId;
 }
@@ -51,6 +86,7 @@ async function recordMembership(tenantId: string, userId: string): Promise<void>
  */
 export async function mayContact(from: string, to: string): Promise<boolean> {
   if (from === to) return true;
+  if ((await isTenantBotUser(from)) || (await isTenantBotUser(to))) return true;
   const [a, b] = await Promise.all([
     prisma.orgMembership.findUnique({ where: { userId: from } }),
     prisma.orgMembership.findUnique({ where: { userId: to } }),

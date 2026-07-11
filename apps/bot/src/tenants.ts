@@ -152,7 +152,7 @@ export async function resolveTenantForRoom(
 
       if (tenant) {
         value = tenantConfig(tenant);
-        if (!mapped) {
+        if (!mapped && source !== 'fallback') {
           await prisma.botRoomTenant.upsert({
             where: { roomId },
             update: { tenantId: tenant.id, source },

@@ -127,6 +127,7 @@ export function CreateRoomModal({
   onCreated: (roomId: string) => void;
 }) {
   const { createRoom } = useMatrix();
+  const { tenant } = useTenant();
   const [name, setName] = useState('');
   const [invite, setInvite] = useState('');
   const [busy, setBusy] = useState(false);
@@ -142,6 +143,9 @@ export function CreateRoomModal({
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
+      if (tenant?.botEnabled && tenant.botUserId && !invites.includes(tenant.botUserId)) {
+        invites.push(tenant.botUserId);
+      }
       const roomId = await createRoom({ name: name.trim(), invite: invites });
       setName('');
       setInvite('');
