@@ -23,6 +23,7 @@ export function AppShell() {
     sendTyping,
     subscribeTimeline,
     subscribeTyping,
+    getTimeline,
     markRead,
     loadOlder,
     setRoomName,
@@ -92,6 +93,22 @@ export function AppShell() {
       unsubTyping();
     };
   }, [activeRoomId, subscribeTimeline, subscribeTyping, markRead]);
+
+  useEffect(() => {
+    if (!activeRoomId) return;
+    const refresh = () => setMessages(getTimeline(activeRoomId));
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    const interval = window.setInterval(refresh, 5000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [activeRoomId, getTimeline]);
 
   async function handleSend(body: string) {
     if (!activeRoomId) return;

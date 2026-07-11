@@ -21,6 +21,7 @@ const envSchema = z.object({
     .transform((v) => v === 'true'),
   BOT_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(10),
   BOT_STORAGE_PATH: z.string().default('./.bot-storage'),
+  BOT_TENANT_POLL_MS: z.coerce.number().int().min(5_000).default(30_000),
 
   // Tenant por defecto al que se asocian los logs (cuando hay un solo homeserver).
   BOT_DEFAULT_TENANT_SLUG: z.string().default('default'),

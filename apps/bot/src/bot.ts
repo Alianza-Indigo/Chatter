@@ -102,6 +102,10 @@ export class WhalabiBot {
     );
   }
 
+  stop(): void {
+    this.client?.stop();
+  }
+
   /** Devuelve (y cachea) el proveedor LLM para una config de tenant. */
   private providerFor(cfg: ResolvedTenantConfig): LLMProvider {
     const { provider, baseUrl, model, apiKey } = cfg.llm;
