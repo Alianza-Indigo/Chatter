@@ -4,7 +4,7 @@ import type { CreateTenantInput, UpdateTenantInput } from '@whalabi/shared';
 import { prisma } from '../db.js';
 import { env } from '../env.js';
 import { encryptSecret } from '../crypto.js';
-import { createUser } from './synapse-admin.js';
+import { createUser, setDisplayName } from './synapse-admin.js';
 
 const ADMIN_HS = env.MATRIX_DEFAULT_HOMESERVER_URL;
 
@@ -89,6 +89,13 @@ async function ensureTenantBotAccount(tenant: PrismaTenant): Promise<void> {
   if (!botUserId) return;
   const parsed = splitMatrixUserId(botUserId);
   if (!parsed) throw new Error(`botUserId invalido: ${botUserId}`);
+  try {
+    await setDisplayName(ADMIN_HS, botUserId, `${tenant.name} Bot`);
+    return;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!message.includes('404') && !message.includes('M_NOT_FOUND')) throw err;
+  }
   await createUser(ADMIN_HS, parsed.serverName, {
     localpart: parsed.localpart,
     password: env.BOT_PASSWORD,

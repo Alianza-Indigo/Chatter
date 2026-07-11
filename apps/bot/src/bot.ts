@@ -72,6 +72,9 @@ export class WhalabiBot {
         this.configuredBotUserId.replace(/^@/, '').split(':')[0] ?? this.configuredBotUserId;
       const authed = await auth.passwordLogin(localpart, env.BOT_PASSWORD);
       accessToken = authed.accessToken;
+      if (!accessToken) {
+        throw new Error(`No se obtuvo access token para ${this.configuredBotUserId}.`);
+      }
       logger.info(
         { botUserId: this.configuredBotUserId, tenantId: this.tenantId },
         'Bot autenticado por password.',
