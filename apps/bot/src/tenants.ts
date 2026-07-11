@@ -13,11 +13,22 @@ export interface ResolvedTenantConfig {
   llm: { provider: LlmProviderKind; baseUrl: string; apiKey: string; model: string };
 }
 
+export interface BotTenantRuntimeConfig {
+  tenantId: string;
+  slug: string;
+  name: string;
+  botUserId: string;
+}
+
 const TTL_MS = 60_000;
 const cache = new Map<string, { value: ResolvedTenantConfig; exp: number }>();
 
 type TenantConfigRow = {
   id: string;
+  slug?: string;
+  name?: string;
+  matrixServerName?: string;
+  botUserId?: string | null;
   botEnabled: boolean;
   botSystemPrompt: string | null;
   botResponseMode: BotResponseMode;
@@ -26,6 +37,14 @@ type TenantConfigRow = {
   llmApiKey: string | null;
   llmModel: string | null;
 };
+
+function botUserIdForTenant(tenant: Pick<TenantConfigRow, 'slug' | 'matrixServerName' | 'botUserId'>): string {
+  const configured = tenant.botUserId?.trim();
+  if (configured) return configured;
+  const slug = tenant.slug?.trim() || env.BOT_DEFAULT_TENANT_SLUG;
+  const serverName = tenant.matrixServerName?.trim() || env.MATRIX_DEFAULT_SERVER_NAME;
+  return `@whalabi-bot-${slug}:${serverName}`;
+}
 
 function defaultBaseUrl(provider: LlmProviderKind): string {
   switch (provider) {
@@ -110,22 +129,29 @@ function tenantConfig(tenant: TenantConfigRow): ResolvedTenantConfig {
 export async function resolveTenantForRoom(
   roomId: string,
   senderId?: string,
+  tenantIdHint?: string,
 ): Promise<ResolvedTenantConfig> {
   const now = Date.now();
-  const cached = cache.get(roomId);
+  const cacheKey = tenantIdHint ? `${tenantIdHint}:${roomId}` : roomId;
+  const cached = cache.get(cacheKey);
   if (cached && cached.exp > now) return cached.value;
 
   let value = envConfig(null);
 
   if (prisma) {
     try {
-      const mapped = await prisma.botRoomTenant.findUnique({
-        where: { roomId },
-        include: { tenant: true },
-      });
+      const tenantByHint = tenantIdHint
+        ? await prisma.tenant.findUnique({ where: { id: tenantIdHint } })
+        : null;
+      const mapped = tenantByHint
+        ? null
+        : await prisma.botRoomTenant.findUnique({
+            where: { roomId },
+            include: { tenant: true },
+          });
 
-      let tenant: TenantConfigRow | null = mapped?.tenant ?? null;
-      let source = mapped ? 'room_map' : 'fallback';
+      let tenant: TenantConfigRow | null = tenantByHint ?? mapped?.tenant ?? null;
+      let source = tenantByHint ? 'bot_tenant' : mapped ? 'room_map' : 'fallback';
 
       if (!tenant && senderId) {
         const membership = await prisma.orgMembership.findUnique({
@@ -166,6 +192,28 @@ export async function resolveTenantForRoom(
     }
   }
 
-  cache.set(roomId, { value, exp: now + TTL_MS });
+  cache.set(cacheKey, { value, exp: now + TTL_MS });
   return value;
+}
+
+export async function listEnabledBotTenants(): Promise<BotTenantRuntimeConfig[]> {
+  if (!prisma) return [];
+  const tenants = await prisma.tenant.findMany({
+    where: { botEnabled: true },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      matrixServerName: true,
+      botUserId: true,
+      botEnabled: true,
+    },
+  });
+  return tenants.map((tenant) => ({
+    tenantId: tenant.id,
+    slug: tenant.slug,
+    name: tenant.name,
+    botUserId: botUserIdForTenant(tenant),
+  }));
 }

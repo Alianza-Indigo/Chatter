@@ -30,17 +30,15 @@ function botUserIdForTenant(tenant: PrismaTenant): string | null {
   const configured = tenant.botUserId?.trim();
   if (configured) return configured;
   const serverName = tenant.matrixServerName || env.MATRIX_DEFAULT_SERVER_NAME;
-  return serverName ? `@whalabi-bot:${serverName}` : null;
+  return serverName ? `@whalabi-bot-${tenant.slug}:${serverName}` : null;
 }
 
-async function isTenantBotUser(userId: string): Promise<boolean> {
-  const fallbackBotId = `@whalabi-bot:${env.MATRIX_DEFAULT_SERVER_NAME}`;
-  if (userId === fallbackBotId) return true;
+async function botTenantId(userId: string): Promise<string | null> {
   const tenant = await prisma.tenant.findFirst({
     where: { botUserId: userId },
     select: { id: true },
   });
-  return Boolean(tenant);
+  return tenant?.id ?? null;
 }
 
 async function ensureBotInSpace(tenant: PrismaTenant, spaceId: string): Promise<void> {
@@ -86,11 +84,17 @@ async function recordMembership(tenantId: string, userId: string): Promise<void>
  */
 export async function mayContact(from: string, to: string): Promise<boolean> {
   if (from === to) return true;
-  if ((await isTenantBotUser(from)) || (await isTenantBotUser(to))) return true;
-  const [a, b] = await Promise.all([
+  const [fromBotTenantId, toBotTenantId, a, b] = await Promise.all([
+    botTenantId(from),
+    botTenantId(to),
     prisma.orgMembership.findUnique({ where: { userId: from } }),
     prisma.orgMembership.findUnique({ where: { userId: to } }),
   ]);
+  if (fromBotTenantId || toBotTenantId) {
+    const fromTenantId = fromBotTenantId ?? a?.tenantId ?? null;
+    const toTenantId = toBotTenantId ?? b?.tenantId ?? null;
+    return fromTenantId !== null && fromTenantId === toTenantId;
+  }
   return (a?.tenantId ?? null) === (b?.tenantId ?? null);
 }
 

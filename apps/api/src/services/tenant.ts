@@ -4,6 +4,9 @@ import type { CreateTenantInput, UpdateTenantInput } from '@whalabi/shared';
 import { prisma } from '../db.js';
 import { env } from '../env.js';
 import { encryptSecret } from '../crypto.js';
+import { createUser } from './synapse-admin.js';
+
+const ADMIN_HS = env.MATRIX_DEFAULT_HOMESERVER_URL;
 
 /**
  * Resuelve un tenant por dominio público. Si no hay match exacto, intenta el
@@ -62,6 +65,38 @@ async function uniqueSlug(base: string): Promise<string> {
   return `${clean}-${clean.length}`;
 }
 
+function botLocalpartFromSlug(slug: string): string {
+  const clean = normalizeOrgCode(slug).replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return `whalabi-bot-${clean || 'org'}`;
+}
+
+function botUserIdFor(slug: string, serverName: string): string {
+  return `@${botLocalpartFromSlug(slug)}:${serverName}`;
+}
+
+function splitMatrixUserId(userId: string): { localpart: string; serverName: string } | null {
+  const match = /^@([^:]+):(.+)$/.exec(userId.trim());
+  if (!match) return null;
+  return { localpart: match[1]!, serverName: match[2]! };
+}
+
+async function ensureTenantBotAccount(tenant: PrismaTenant): Promise<void> {
+  if (!tenant.botEnabled) return;
+  if (!env.BOT_PASSWORD) {
+    throw new Error('BOT_PASSWORD es obligatorio para crear bots independientes por organizacion.');
+  }
+  const botUserId = tenant.botUserId?.trim();
+  if (!botUserId) return;
+  const parsed = splitMatrixUserId(botUserId);
+  if (!parsed) throw new Error(`botUserId invalido: ${botUserId}`);
+  await createUser(ADMIN_HS, parsed.serverName, {
+    localpart: parsed.localpart,
+    password: env.BOT_PASSWORD,
+    displayName: `${tenant.name} Bot`,
+    admin: false,
+  });
+}
+
 export async function createTenant(input: CreateTenantInput): Promise<PrismaTenant> {
   // Código de acceso: con código -> aislada; sin código -> general (null).
   let code: string | null = null;
@@ -72,7 +107,8 @@ export async function createTenant(input: CreateTenantInput): Promise<PrismaTena
   }
   // El slug es interno; garantizamos unicidad automáticamente para no romper el alta.
   const slug = await uniqueSlug(input.slug || input.name);
-  return prisma.tenant.create({
+  const matrixServerName = input.matrixServerName ?? env.MATRIX_DEFAULT_SERVER_NAME;
+  const tenant = await prisma.tenant.create({
     data: {
       name: input.name,
       slug,
@@ -82,8 +118,8 @@ export async function createTenant(input: CreateTenantInput): Promise<PrismaTena
       // al homeserver → debe ser PÚBLICA (APP_PUBLIC_URL, p. ej. https://whalabi.app).
       // Las operaciones server-side (Admin API) usan el Synapse interno por código.
       matrixBaseUrl: input.matrixBaseUrl ?? env.APP_PUBLIC_URL,
-      matrixServerName: input.matrixServerName ?? env.MATRIX_DEFAULT_SERVER_NAME,
-      botUserId: input.botUserId ?? null,
+      matrixServerName,
+      botUserId: input.botUserId ?? botUserIdFor(slug, matrixServerName),
       botEnabled: input.botEnabled ?? false,
       botSystemPrompt: input.botSystemPrompt ?? null,
       botResponseMode: input.botResponseMode ?? 'mention',
@@ -98,6 +134,8 @@ export async function createTenant(input: CreateTenantInput): Promise<PrismaTena
       allowRegistration: input.allowRegistration ?? false,
     },
   });
+  await ensureTenantBotAccount(tenant);
+  return tenant;
 }
 
 export async function updateTenant(
@@ -116,7 +154,16 @@ export async function updateTenant(
       throw new Error(`Ya existe una organización con el código "${code}".`);
     }
   }
-  return prisma.tenant.update({
+  const existing = await prisma.tenant.findUnique({ where: { id } });
+  if (!existing) throw new Error('Organizacion no encontrada.');
+  const nextSlug = input.slug ?? existing.slug;
+  const nextServerName = input.matrixServerName ?? existing.matrixServerName;
+  const nextBotUserId =
+    input.botUserId === undefined
+      ? existing.botUserId ?? botUserIdFor(nextSlug, nextServerName)
+      : input.botUserId || botUserIdFor(nextSlug, nextServerName);
+
+  const tenant = await prisma.tenant.update({
     where: { id },
     data: {
       name: input.name,
@@ -130,7 +177,7 @@ export async function updateTenant(
       code,
       matrixBaseUrl: input.matrixBaseUrl,
       matrixServerName: input.matrixServerName,
-      botUserId: input.botUserId,
+      botUserId: nextBotUserId,
       botEnabled: input.botEnabled,
       botSystemPrompt: input.botSystemPrompt,
       botResponseMode: input.botResponseMode,
@@ -146,6 +193,8 @@ export async function updateTenant(
       allowRegistration: input.allowRegistration,
     },
   });
+  await ensureTenantBotAccount(tenant);
+  return tenant;
 }
 
 /**
@@ -163,7 +212,7 @@ export async function ensureDefaultTenant(): Promise<PrismaTenant> {
       matrixBaseUrl: env.MATRIX_DEFAULT_HOMESERVER_URL,
       matrixServerName: env.MATRIX_DEFAULT_SERVER_NAME,
       botEnabled: true,
-      botUserId: `@whalabi-bot:${env.MATRIX_DEFAULT_SERVER_NAME}`,
+      botUserId: botUserIdFor('default', env.MATRIX_DEFAULT_SERVER_NAME),
       botResponseMode: 'mention',
       llmProvider: env.LLM_PROVIDER,
       llmModel: env.LLM_MODEL,

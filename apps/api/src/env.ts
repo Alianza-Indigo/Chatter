@@ -11,6 +11,8 @@ const envSchema = z.object({
   // Credenciales de administrador de Matrix para la Synapse Admin API.
   MATRIX_ADMIN_USER: z.string().optional().default(''),
   MATRIX_ADMIN_PASSWORD: z.string().optional().default(''),
+  // Password compartido para crear/iniciar los bots Matrix por organizacion.
+  BOT_PASSWORD: z.string().optional().default(''),
   // URL pública (para construir ligas de invitación).
   APP_PUBLIC_URL: z.string().url().default('http://localhost:3000'),
 
@@ -32,7 +34,7 @@ const envSchema = z.object({
   VAPID_SUBJECT: z.string().default('mailto:admin@whalabi.app'),
 
   // LLM por defecto (para /api/admin/bot/test cuando el tenant no define clave).
-  LLM_PROVIDER: z.enum(['openai', 'ollama', 'dummy']).default('dummy'),
+  LLM_PROVIDER: z.enum(['openai', 'ollama', 'dummy', 'gemini']).default('dummy'),
   LLM_API_KEY: z.string().optional().default(''),
   LLM_BASE_URL: z.string().default('https://api.openai.com/v1'),
   LLM_MODEL: z.string().default('gpt-4o-mini'),

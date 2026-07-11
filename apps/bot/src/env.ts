@@ -10,6 +10,7 @@ const envSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
   BOT_HOMESERVER_URL: z.string().url().default('http://localhost:8008'),
+  MATRIX_DEFAULT_SERVER_NAME: z.string().default('whalabi.local'),
   BOT_USER_ID: z.string().default('@whalabi-bot:whalabi.local'),
   BOT_PASSWORD: z.string().optional().default(''),
   BOT_ACCESS_TOKEN: z.string().optional().default(''),

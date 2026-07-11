@@ -5,7 +5,7 @@ import {
   SimpleFsStorageProvider,
 } from 'matrix-bot-sdk';
 import crypto from 'node:crypto';
-import { mentionsUser, truncate, serverNameFromUserId } from '@whalabi/shared';
+import { mentionsUser, truncate } from '@whalabi/shared';
 import { env } from './env.js';
 import { logger } from './logger.js';
 import { RateLimiter } from './rate-limit.js';
@@ -18,6 +18,13 @@ const MAX_CONTEXT_MESSAGES = 12;
 interface ContextMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+export interface WhalabiBotOptions {
+  tenantId: string | null;
+  tenantSlug: string;
+  botUserId: string;
+  displayName: string;
 }
 
 /**
@@ -33,29 +40,42 @@ interface ContextMessage {
 export class WhalabiBot {
   private client!: MatrixClient;
   private botUserId = '';
+  private readonly tenantId: string | null;
+  private readonly tenantSlug: string;
+  private readonly configuredBotUserId: string;
+  private readonly displayName: string;
   private readonly limiter: RateLimiter;
   private readonly context = new Map<string, ContextMessage[]>();
   private readonly directRooms = new Set<string>();
   /** Cache de proveedores LLM por firma de configuración. */
   private readonly providerCache = new Map<string, LLMProvider>();
 
-  constructor() {
+  constructor(options?: Partial<WhalabiBotOptions>) {
+    this.tenantId = options?.tenantId ?? null;
+    this.tenantSlug = options?.tenantSlug ?? env.BOT_DEFAULT_TENANT_SLUG;
+    this.configuredBotUserId = options?.botUserId ?? env.BOT_USER_ID;
+    this.displayName = options?.displayName ?? env.BOT_DISPLAY_NAME;
     this.limiter = new RateLimiter(env.BOT_RATE_LIMIT_PER_MINUTE);
   }
 
   async start(): Promise<void> {
-    const storage = new SimpleFsStorageProvider(`${env.BOT_STORAGE_PATH}/sync.json`);
+    const storageName = this.configuredBotUserId.replace(/[^a-zA-Z0-9_.-]+/g, '_');
+    const storage = new SimpleFsStorageProvider(`${env.BOT_STORAGE_PATH}/${storageName}/sync.json`);
 
-    let accessToken = env.BOT_ACCESS_TOKEN;
+    let accessToken = this.tenantId ? '' : env.BOT_ACCESS_TOKEN;
     if (!accessToken) {
       if (!env.BOT_PASSWORD) {
         throw new Error('Define BOT_ACCESS_TOKEN o BOT_PASSWORD para el bot.');
       }
       const auth = new MatrixAuth(env.BOT_HOMESERVER_URL);
-      const localpart = env.BOT_USER_ID.replace(/^@/, '').split(':')[0] ?? env.BOT_USER_ID;
+      const localpart =
+        this.configuredBotUserId.replace(/^@/, '').split(':')[0] ?? this.configuredBotUserId;
       const authed = await auth.passwordLogin(localpart, env.BOT_PASSWORD);
       accessToken = authed.accessToken;
-      logger.info('Bot autenticado por password.');
+      logger.info(
+        { botUserId: this.configuredBotUserId, tenantId: this.tenantId },
+        'Bot autenticado por password.',
+      );
     }
 
     this.client = new MatrixClient(env.BOT_HOMESERVER_URL, accessToken, storage);
@@ -63,7 +83,7 @@ export class WhalabiBot {
 
     this.botUserId = await this.client.getUserId();
     try {
-      await this.client.setDisplayName(env.BOT_DISPLAY_NAME);
+      await this.client.setDisplayName(this.displayName);
     } catch {
       // no crítico
     }
@@ -73,7 +93,10 @@ export class WhalabiBot {
     });
 
     await this.client.start();
-    logger.info(`Whalabi Bot iniciado como ${this.botUserId} (multi-tenant).`);
+    logger.info(
+      { botUserId: this.botUserId, tenantId: this.tenantId, tenantSlug: this.tenantSlug },
+      'Whalabi Bot iniciado.',
+    );
   }
 
   /** Devuelve (y cachea) el proveedor LLM para una config de tenant. */
@@ -117,7 +140,7 @@ export class WhalabiBot {
     if (sender === this.botUserId) return;
 
     const body = content.body;
-    const cfg = await resolveTenantForRoom(roomId, sender);
+    const cfg = await resolveTenantForRoom(roomId, sender, this.tenantId ?? undefined);
 
     this.pushContext(roomId, 'user', body);
     await logEvent({
@@ -137,7 +160,7 @@ export class WhalabiBot {
     const isDirect = await this.isDirectRoom(roomId);
     const mentioned = mentionsUser(body, {
       userId: this.botUserId,
-      displayName: env.BOT_DISPLAY_NAME,
+      displayName: this.displayName,
     });
 
     if (!this.shouldRespond(cfg.responseMode, isDirect, mentioned)) {
@@ -226,5 +249,3 @@ interface MatrixMessageEvent {
   sender: string;
   content?: { msgtype?: string; body?: string };
 }
-
-export { serverNameFromUserId };

@@ -72,7 +72,7 @@ model Tenant {
   matrixServerName String
 
   // Bot
-  botUserId        String?
+  botUserId        String?         @unique
   botEnabled       Boolean         @default(false)
   botSystemPrompt  String?
   botResponseMode  BotResponseMode @default(mention)
