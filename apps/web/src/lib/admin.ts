@@ -55,8 +55,21 @@ export async function adminFetch<T = unknown>(
   if (!res.ok) {
     let message = `Error ${res.status}`;
     try {
-      const body = (await res.json()) as { message?: string; error?: string };
+      const body = (await res.json()) as {
+        message?: string;
+        error?: string;
+        issues?: Array<{ path?: Array<string | number>; message?: string }>;
+      };
       message = body.message ?? body.error ?? message;
+      if (body.issues?.length) {
+        const details = body.issues
+          .map((issue) => {
+            const field = issue.path?.join('.') || 'campo';
+            return `${field}: ${issue.message ?? 'valor invalido'}`;
+          })
+          .join('; ');
+        message = `${message}: ${details}`;
+      }
     } catch {
       /* ignore */
     }

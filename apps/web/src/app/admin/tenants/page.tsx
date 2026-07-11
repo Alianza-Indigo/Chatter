@@ -156,7 +156,6 @@ function TenantForm({
       // Matrix opcional: si va vacío, el servidor usa el homeserver del despliegue.
       ...(form.matrixBaseUrl ? { matrixBaseUrl: form.matrixBaseUrl } : {}),
       ...(form.matrixServerName ? { matrixServerName: form.matrixServerName } : {}),
-      botUserId: form.botUserId,
       botEnabled: form.botEnabled,
       botSystemPrompt: form.botSystemPrompt,
       botResponseMode: form.botResponseMode,
@@ -270,7 +269,9 @@ function TenantForm({
           <input type="checkbox" checked={form.botEnabled} onChange={(e) => set('botEnabled', e.target.checked)} />
           Bot habilitado
         </label>
-        <Field label="Bot user ID"><input className="input" value={form.botUserId ?? ''} onChange={(e) => set('botUserId', e.target.value || null)} /></Field>
+        <Field label="Bot user ID">
+          <input className="input bg-slate-50 text-slate-500 dark:bg-slate-950 dark:text-slate-400" value={form.botUserId ?? ''} readOnly />
+        </Field>
         <Field label="Modo de respuesta">
           <select className="input" value={form.botResponseMode} onChange={(e) => set('botResponseMode', e.target.value as Tenant['botResponseMode'])}>
             <option value="mention">Mención o DM</option>
@@ -278,7 +279,9 @@ function TenantForm({
             <option value="always">Siempre</option>
           </select>
         </Field>
-        <Field label="Prompt del sistema"><textarea className="input min-h-24" value={form.botSystemPrompt ?? ''} onChange={(e) => set('botSystemPrompt', e.target.value || null)} /></Field>
+        <Field label={`Prompt del sistema (${(form.botSystemPrompt ?? '').length}/20000)`}>
+          <textarea className="input min-h-24" maxLength={20000} value={form.botSystemPrompt ?? ''} onChange={(e) => set('botSystemPrompt', e.target.value || null)} />
+        </Field>
         <Field label="Proveedor LLM">
           <select className="input" value={form.llmProvider} onChange={(e) => set('llmProvider', e.target.value as Tenant['llmProvider'])}>
             <option value="dummy">Dummy (demo)</option>

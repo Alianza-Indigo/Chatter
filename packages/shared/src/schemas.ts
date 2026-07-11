@@ -50,9 +50,13 @@ export const createTenantSchema = z.object({
   /** Matrix: por defecto el homeserver del despliegue (se rellena en el servidor). */
   matrixBaseUrl: z.string().url().optional(),
   matrixServerName: z.string().min(1).optional(),
-  botUserId: z.string().nullable().optional(),
+  botUserId: z
+    .string()
+    .regex(/^@[^:]+:.+$/, 'Debe ser un Matrix ID completo, p. ej. @bot:whalabi.app')
+    .nullable()
+    .optional(),
   botEnabled: z.boolean().default(false),
-  botSystemPrompt: z.string().max(4000).nullable().optional(),
+  botSystemPrompt: z.string().max(20000, 'El prompt no puede exceder 20000 caracteres').nullable().optional(),
   botResponseMode: botResponseModeSchema.default('mention'),
   llmProvider: llmProviderKindSchema.default('dummy'),
   llmModel: z.string().max(200).nullable().optional(),
