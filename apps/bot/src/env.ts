@@ -25,7 +25,7 @@ const envSchema = z.object({
   BOT_DEFAULT_TENANT_SLUG: z.string().default('default'),
 
   // LLM
-  LLM_PROVIDER: z.enum(['openai', 'ollama', 'dummy']).default('dummy'),
+  LLM_PROVIDER: z.enum(['openai', 'ollama', 'dummy', 'gemini']).default('dummy'),
   LLM_API_KEY: z.string().optional().default(''),
   LLM_BASE_URL: z.string().default('https://api.openai.com/v1'),
   LLM_MODEL: z.string().default('gpt-4o-mini'),

@@ -97,6 +97,7 @@ model Tenant {
   updatedAt        DateTime        @updatedAt
 
   botLogs          BotLog[]
+  botRooms         BotRoomTenant[]
   pushSubscriptions PushSubscription[]
   invitations      Invitation[]
   memberships      OrgMembership[]
@@ -115,6 +116,21 @@ model OrgMembership {
   tenantId  String
   /// MXID completo, p. ej. @ana:whalabi.app. Único en el homeserver.
   userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+/// Mapeo operativo room -> organizacion para que el bot use prompt/proveedor/key
+/// del tenant correcto aunque varias organizaciones compartan el mismo Synapse.
+model BotRoomTenant {
+  roomId    String   @id
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId  String
+  /// room_map = persistido previamente; sender_membership = inferido del usuario;
+  /// tenant_space = room del espacio de la organizacion; fallback = tenant default.
+  source    String   @default("sender_membership")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -4,6 +4,7 @@ import {
   AutojoinRoomsMixin,
   SimpleFsStorageProvider,
 } from 'matrix-bot-sdk';
+import crypto from 'node:crypto';
 import { mentionsUser, truncate, serverNameFromUserId } from '@whalabi/shared';
 import { env } from './env.js';
 import { logger } from './logger.js';
@@ -78,7 +79,10 @@ export class WhalabiBot {
   /** Devuelve (y cachea) el proveedor LLM para una config de tenant. */
   private providerFor(cfg: ResolvedTenantConfig): LLMProvider {
     const { provider, baseUrl, model, apiKey } = cfg.llm;
-    const key = `${provider}|${baseUrl}|${model}|${apiKey ? 'k' : '-'}`;
+    const keyHash = apiKey
+      ? crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 16)
+      : '-';
+    const key = `${cfg.tenantId ?? 'env'}|${provider}|${baseUrl}|${model}|${keyHash}`;
     let p = this.providerCache.get(key);
     if (!p) {
       p = createLLMProvider({ provider, baseUrl, apiKey });
@@ -113,7 +117,7 @@ export class WhalabiBot {
     if (sender === this.botUserId) return;
 
     const body = content.body;
-    const cfg = await resolveTenantForRoom(roomId);
+    const cfg = await resolveTenantForRoom(roomId, sender);
 
     this.pushContext(roomId, 'user', body);
     await logEvent({
