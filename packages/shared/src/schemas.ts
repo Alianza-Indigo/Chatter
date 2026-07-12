@@ -96,7 +96,7 @@ export const botLogsQuerySchema = z.object({
 /**
  * Cuerpo para unir al usuario recién registrado a su espacio.
  * El usuario se autentica con su propio access token de Matrix (Authorization:
- * Bearer), no aquí; este cuerpo solo trae el código (vacío = espacio Global).
+ * Bearer), no aquí; este cuerpo solo trae el código (vacío = espacio Whalabi).
  */
 export const joinOrgSchema = z.object({
   code: z.string().trim().max(48).optional().nullable(),

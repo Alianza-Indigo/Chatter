@@ -168,7 +168,7 @@ export async function deactivateUser(baseUrl: string, userId: string): Promise<v
 
 /**
  * Crea un Espacio Matrix (m.space) privado y no listado, propiedad del usuario
- * admin. Se usa para las organizaciones y el espacio Global del multitenant.
+ * admin. Se usa para las organizaciones y el espacio Whalabi/general del multitenant.
  * Al ser privado (visibility: private) sus miembros NO aparecen en el directorio
  * global; con search_all_users:false solo se descubren entre sí.
  */

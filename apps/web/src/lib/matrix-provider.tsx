@@ -35,7 +35,7 @@ interface MatrixContextValue {
     password: string;
     registrationToken?: string;
     captchaResponse?: string;
-    /** Código de organización (vacío = espacio Global). */
+    /** Código de organización (vacío = espacio Whalabi/general). */
     orgCode?: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
@@ -127,7 +127,7 @@ export function MatrixProvider({ children }: { children: ReactNode }) {
   const register = useCallback<MatrixContextValue['register']>(
     async ({ orgCode, ...params }) => {
       const s = await client.register(params);
-      // Multitenant híbrido: unir al usuario a su espacio (Global o el de su
+      // Multitenant híbrido: unir al usuario a su espacio (Whalabi/general o el de su
       // organización) usando su propio access token recién emitido. Debe ocurrir
       // antes de arrancar el sync para que el espacio aparezca desde el inicio.
       await joinOrgSpace(s.accessToken, orgCode);

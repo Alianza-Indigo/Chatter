@@ -18,7 +18,7 @@ export async function fetchTenantConfig(domain?: string): Promise<PublicTenantCo
 
 /**
  * Comprueba un código de organización ANTES de crear la cuenta.
- * Vacío = espacio Global (siempre válido). Devuelve el nombre si es una org.
+ * Vacío = espacio Whalabi/general (siempre válido). Devuelve el nombre si es una org.
  */
 export async function checkOrgCode(
   code: string,
@@ -32,7 +32,7 @@ export async function checkOrgCode(
 }
 
 /**
- * Une al usuario recién registrado a su espacio (Global o el de su organización).
+ * Une al usuario recién registrado a su espacio (Whalabi/general o el de su organización).
  * Se autentica con su propio access token de Matrix. Lanza si el código es
  * inválido o la unión falla, para que el flujo de registro lo muestre.
  */
